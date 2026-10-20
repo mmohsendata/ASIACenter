@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>آسيا سنتر | ASIA CENTER</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="آسيا">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="brand-logo">آ</div>
+    <div>
+      <h1>سنتر آسيا | ASIA CENTER</h1>
+      <p>المنظومة الدائمة لإدارة الكورسات والحسابات</p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <span id="current-user-label" style="color: white;"></span>
+    <button class="btn btn-outline" style="color: white; border-color: rgba(255,255,255,0.25);" onclick="logoutUser()">
+      <i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج
+    </button>
+    <button class="btn btn-outline" style="color: white; border-color: rgba(255,255,255,0.25);" onclick="openChangePasswordModal()">
+      <i class="fa-solid fa-key"></i> تغيير الباسوورد
+    </button>
+    <button class="btn btn-outline" data-permission="backups.manage" style="color: white; border-color: rgba(255,255,255,0.25);" onclick="openBackupModal()">
+      <i class="fa-solid fa-cloud-arrow-up"></i> حفظ وأمان البيانات
+    </button>
+  </div>
+</header>
+
+<div class="nav-bar">
+  <div class="nav-item active" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> تصفية دخل اليوم</div>
+  <div class="nav-item" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> إدارة المواد والحصص</div>
+  <div class="nav-item" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> بحث وشيت الطلاب</div>
+  <div class="nav-item" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> حسابات المعيدين ونسبة السنتر</div>
+  <div class="nav-item" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> شيت الورك سبيس</div>
+  <div class="nav-item" onclick="switchTab('expenses')"><i class="fa-solid fa-receipt"></i> المصروفات</div>
+  <div class="nav-item" onclick="switchTab('closing')"><i class="fa-solid fa-chart-pie"></i> الأرباح والإقفال</div>
+  <div class="nav-item" data-permission="users.manage" onclick="switchTab('admin')"><i class="fa-solid fa-user-shield"></i> إدارة المستخدمين</div>
+</div>
+
+<div class="container">
+
+  <!-- ================= TAB 1: DAILY FILTER & TODAY REVENUE ================= -->
+  <section id="tab-daily">
+    <div class="box" style="background: linear-gradient(135deg, #1e3a8a, #2563eb); color: white;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h2 style="font-size: 1.4rem; font-weight: 800;">تصفية دخل وتفاصيل اليوم 📅</h2>
+          <p style="opacity: 0.85; font-size: 0.9rem;">حدد التاريخ لعرض كل من حضر، دخل الحصص (50ج)، دفعات الكورسات، ودخل الورك سبيس</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input type="date" id="filter-date" class="form-control" style="padding: 0.6rem 1rem; border-radius: 10px; border: none; font-weight: bold; outline: none;" onchange="loadDailyReport()">
+          <button class="btn btn-accent" onclick="setTodayDate()"><i class="fa-solid fa-clock"></i> اليوم</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-info">
+          <h4>إجمالي دخل هذا التاريخ</h4>
+          <div class="stat-val" id="daily-total-income">0 ج.م</div>
+        </div>
+        <div class="stat-icon" style="background: #eff6ff; color: #2563eb;"><i class="fa-solid fa-vault"></i></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-info">
+          <h4>حضور ودفع الحصص (50ج)</h4>
+          <div class="stat-val" id="daily-session-income">0 ج.م</div>
+        </div>
+        <div class="stat-icon" style="background: #fef3c7; color: #d97706;"><i class="fa-solid fa-money-bill-wave"></i></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-info">
+          <h4>دفعات اشتراك الكورسات</h4>
+          <div class="stat-val" id="daily-course-income">0 ج.م</div>
+        </div>
+        <div class="stat-icon" style="background: #dcfce7; color: #16a34a;"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-info">
+          <h4>دخل الورك سبيس</h4>
+          <div class="stat-val" id="daily-ws-income">0 ج.م</div>
+        </div>
+        <div class="stat-icon" style="background: #f3e8ff; color: #9333ea;"><i class="fa-solid fa-laptop-code"></i></div>
+      </div>
+    </div>
+
+    <!-- Daily Details Breakdown -->
+    <div class="box">
+      <div class="box-header">
+        <div class="box-title"><i class="fa-solid fa-list-check" style="color: #2563eb;"></i> الطلاب الذين حضروا ودفعوا في هذا التاريخ</div>
+        <span class="badge badge-primary" id="daily-students-count">0 طالب حاضر</span>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>اسم الطالب</th>
+              <th>رقم الهاتف</th>
+              <th>المادة / النشاط</th>
+              <th>الحالة</th>
+              <th>المبلغ المحصل</th>
+            </tr>
+          </thead>
+          <tbody id="daily-table-body">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TAB 2: COURSES & SESSIONS ================= -->
+  <section id="tab-courses" style="display: none;">
+    <div class="box">
+      <div class="box-header">
+        <div class="box-title"><i class="fa-solid fa-book" style="color: var(--primary-light);"></i> قائمة المواد والكورسات المتاحة</div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <div class="input-group">
+            <i class="fa-solid fa-search"></i>
+            <input type="text" id="course-search-input" placeholder="ابحث عن مادة..." oninput="filterCoursesList()">
+          </div>
+          <button class="btn btn-primary" onclick="openAddCourseModalWithLock()"><i class="fa-solid fa-plus"></i> إضافة مادة جديدة 🔒</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>المادة</th>
+              <th>المعيد</th>
+              <th>عدد الطلاب</th>
+              <th>سعر الكورس</th>
+              <th>نسبة المعيد</th>
+              <th>المحصل للكورس</th>
+              <th>محصل الحصص</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="courses-table-body">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Active Session Manager Modal / View -->
+    <div id="active-course-box" class="box" style="display: none; border: 2px solid var(--primary-light);">
+      <div class="box-header">
+        <div>
+          <span class="badge badge-primary" id="session-badge">تسجيل الحصة</span>
+          <h3 id="current-course-title" style="font-size: 1.3rem; margin-top: 5px;">اسم المادة</h3>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <input type="date" id="session-date-input" style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border);" onchange="if (currentCourseIndex !== null) renderCourseStudents(currentCourseIndex)">
+          <button class="btn btn-primary" onclick="openPrintCourseSheet()"><i class="fa-solid fa-print"></i> كشف وطباعة المادة</button>
+          <button class="btn btn-success" onclick="openAddStudentToCourseModalWithLock()"><i class="fa-solid fa-user-plus"></i> إضافة طالب 🔒</button>
+          <button class="btn btn-outline" onclick="closeCourseSession()"><i class="fa-solid fa-xmark"></i> إغلاق</button>
+        </div>
+      </div>
+      
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+        💡 <b>حماية النظام:</b> يمكنك تسجيل الحضور وتحصيل الـ 50 فوراً، ولكن <u>التعديل بعد الدفع أو إلغاء الحضور أو حذف الطالب</u> محمي بالباسوورد لضمان عدم التلاعب.
+      </p>
+
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>م</th>
+              <th>اسم الطالب</th>
+              <th>رقم الهاتف</th>
+              <th>سعر الكورس</th>
+              <th>المدفوع للكورس</th>
+              <th>المتبقي</th>
+              <th>تسديد دفعة</th>
+              <th>حضر اليوم؟</th>
+              <th>دفع 50ج؟</th>
+              <th>تعديل</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="course-students-body">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TAB 3: SEARCH ALL STUDENTS ================= -->
+  <section id="tab-students" style="display: none;">
+    <div class="box">
+      <div class="box-header">
+        <div class="box-title"><i class="fa-solid fa-address-book" style="color: var(--primary-light);"></i> الاستعلام الشامل عن الطلاب والمواد المسجلة</div>
+        <div class="input-group">
+          <i class="fa-solid fa-search"></i>
+          <input type="text" id="global-student-search" placeholder="ابحث باسم الطالب أو رقم الهاتف..." oninput="renderStudentsDirectory()">
+        </div>
+      </div>
+      <div id="students-directory-results">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TAB 4: PROFESSORS & REVENUE SPLIT ================= -->
+  <section id="tab-professors" style="display: none;">
+    <div class="box">
+      <div class="box-header">
+        <div>
+          <div class="box-title"><i class="fa-solid fa-scale-balanced" style="color: var(--accent);"></i> تفاصيل حصة السنتر ونسبة المعيد لكل مادة</div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+            تحدد نسبة المعيد لكل مادة، ويحصل السنتر على النسبة المتبقية من سعر الكورس لكل طالب.
+          </p>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>المادة</th>
+              <th>المعيد</th>
+              <th>سعر الكورس</th>
+              <th>نسبة المعيد</th>
+              <th>عدد الطلاب</th>
+              <th>إجمالي المستحق</th>
+              <th>المحصل الفعلي</th>
+              <th>نسبة السنتر (المكان)</th>
+              <th>مستحق المعيد الصافي</th>
+            </tr>
+          </thead>
+          <tbody id="professors-table-body">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TAB 5: WORKSPACE ================= -->
+  <section id="tab-workspace" style="display: none;">
+    <div class="box">
+      <div class="box-header">
+        <div class="box-title"><i class="fa-solid fa-laptop-code" style="color: #9333ea;"></i> شيت الورك سبيس (تسجيل اليومية والحسابات)</div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary" onclick="openAddWorkspaceModal()"><i class="fa-solid fa-plus"></i> تسجيل طالب بالورك سبيس</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>اسم الطالب</th>
+              <th>رقم الموبايل</th>
+              <th>وقت الدخول</th>
+              <th>وقت الخروج</th>
+              <th>إضافات / مشروبات</th>
+              <th>المبلغ المحصل</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="workspace-table-body">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TAB 6: EXPENSES ================= -->
+  <section id="tab-expenses" style="display: none;">
+    <div class="box">
+      <div class="box-header">
+        <div class="box-title"><i class="fa-solid fa-receipt" style="color: var(--danger);"></i> تسجيل المصروفات</div>
+      </div>
+      <form id="expense-form" onsubmit="saveExpense(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="expense-date">التاريخ *</label>
+          <input type="date" id="expense-date" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="expense-name">اسم المصروف *</label>
+          <input type="text" id="expense-name" maxlength="120" placeholder="مثال: فاتورة كهرباء" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="expense-amount">المبلغ (ج.م) *</label>
+          <input type="number" id="expense-amount" min="0.01" step="0.01" placeholder="0.00" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="expense-type">النوع *</label>
+          <input type="text" id="expense-type" maxlength="80" placeholder="مثال: مرافق، صيانة، مستلزمات" required>
+        </div>
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i> حفظ المصروف</button>
+      </form>
+    </div>
+    <div class="box">
+      <div class="box-header">
+        <div class="box-title"><i class="fa-solid fa-list" style="color: var(--primary-light);"></i> سجل المصروفات</div>
+        <span class="badge badge-danger" id="expenses-total">إجمالي المصروفات: 0 ج.م</span>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>اسم المصروف</th>
+              <th>النوع</th>
+              <th>المبلغ</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="expenses-table-body">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TAB 7: PROFIT AND CLOSING ================= -->
+  <section id="tab-closing" style="display: none;">
+    <div class="box">
+      <div class="box-header">
+        <div>
+          <div class="box-title"><i class="fa-solid fa-users-gear" style="color: var(--primary-light);"></i> الملاك ونسب الأرباح</div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">نسب الملاك تُحتسب من صافي ربح الفترة. أي نسبة متبقية تبقى ربحاً محتجزاً للمركز.</p>
+        </div>
+      </div>
+      <form id="owner-form" onsubmit="addOwner(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="owner-name">اسم المالك *</label>
+          <input type="text" id="owner-name" maxlength="120" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="owner-percentage">نسبة المالك من الربح (%) *</label>
+          <input type="number" id="owner-percentage" min="0.01" max="100" step="0.01" required>
+        </div>
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i> إضافة مالك</button>
+      </form>
+      <div class="table-responsive" style="margin-top: 1.2rem;">
+        <table>
+          <thead><tr><th>المالك</th><th>نسبة الربح</th><th>إجراءات</th></tr></thead>
+          <tbody id="owners-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="box-header">
+        <div>
+          <div class="box-title"><i class="fa-solid fa-calculator" style="color: var(--success);"></i> حساب دخل وأرباح الفترة</div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">يُحسب دخل الكورسات من المبالغ المحصلة بعد خصم نسبة المعيد، إضافة إلى دخل الحصص والورك سبيس، ثم تُخصم المصروفات المسجلة خلال الفترة. عند الخسارة لا تُصرف حصص للملاك، وتظهر الخسارة على المركز.</p>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="closing-start-date">من تاريخ *</label>
+          <input type="date" id="closing-start-date" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="closing-end-date">إلى تاريخ *</label>
+          <input type="date" id="closing-end-date" required>
+        </div>
+        <button class="btn btn-outline" onclick="previewClosing()" type="button"><i class="fa-solid fa-magnifying-glass-chart"></i> حساب المعاينة</button>
+        <button class="btn btn-primary" onclick="createClosingWithLock()" type="button"><i class="fa-solid fa-file-circle-check"></i> إنشاء إقفال للفترة</button>
+      </div>
+      <div id="closing-preview" style="display: none; margin-top: 1.2rem;"></div>
+    </div>
+
+    <div class="box">
+      <div class="box-header">
+        <div class="box-title"><i class="fa-solid fa-clipboard-check" style="color: var(--accent);"></i> سجل الإقفالات والتوزيعات</div>
+      </div>
+      <div id="closings-list"></div>
+    </div>
+  </section>
+
+  <section id="tab-admin" style="display: none;">
+    <div class="box">
+      <div class="box-header">
+        <div class="box-title"><i class="fa-solid fa-users-gear" style="color: var(--primary-light);"></i> المستخدمون والصلاحيات</div>
+      </div>
+      <form id="admin-user-form" onsubmit="saveAdminUser(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; align-items: end;">
+        <input type="hidden" id="admin-user-original">
+        <div class="form-group" style="margin: 0;"><label for="admin-user-name">اسم المستخدم</label><input id="admin-user-name" required minlength="3" maxlength="40"></div>
+        <div class="form-group" style="margin: 0;"><label for="admin-user-password">كلمة المرور (12 حرفًا على الأقل)</label><input id="admin-user-password" type="password" minlength="12" autocomplete="new-password"></div>
+        <div class="form-group" style="margin: 0;"><label for="admin-user-role">الدور</label><select id="admin-user-role" required></select></div>
+        <label style="display:flex;gap:.5rem;align-items:center;"><input type="checkbox" id="admin-user-active" checked> حساب نشط</label>
+        <button class="btn btn-primary" type="submit">حفظ المستخدم</button>
+        <button class="btn btn-outline" type="button" onclick="resetAdminUserForm()">إلغاء التعديل</button>
+      </form>
+      <div class="table-responsive" style="margin-top: 1rem;">
+        <table><thead><tr><th>المستخدم</th><th>الدور</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="admin-users-body"></tbody></table>
+      </div>
+    </div>
+    <div class="box">
+      <div class="box-header"><div class="box-title"><i class="fa-solid fa-shield-halved"></i> الأدوار والصلاحيات</div></div>
+      <form id="admin-role-form" onsubmit="saveAdminRole(event)">
+        <input type="hidden" id="admin-role-id">
+        <div class="form-group"><label for="admin-role-name">اسم الدور</label><input id="admin-role-name" required maxlength="80"></div>
+        <div id="admin-permission-options" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.7rem;margin:1rem 0;"></div>
+        <button class="btn btn-primary" type="submit">حفظ الدور</button>
+        <button class="btn btn-outline" type="button" onclick="resetAdminRoleForm()">دور جديد</button>
+      </form>
+      <div id="admin-roles-list" style="margin-top:1rem;"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- BOTTOM BAR FOR MOBILE -->
+<div class="bottom-bar">
+  <div class="bottom-bar-item active" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> اليومية</div>
+  <div class="bottom-bar-item" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> الحصص</div>
+  <div class="bottom-bar-item" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> الطلاب</div>
+  <div class="bottom-bar-item" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> المعيدين</div>
+  <div class="bottom-bar-item" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> ورك سبيس</div>
+  <div class="bottom-bar-item" onclick="switchTab('expenses')"><i class="fa-solid fa-receipt"></i> المصروفات</div>
+  <div class="bottom-bar-item" onclick="switchTab('closing')"><i class="fa-solid fa-chart-pie"></i> الإقفال</div>
+  <div class="bottom-bar-item" data-permission="users.manage" onclick="switchTab('admin')"><i class="fa-solid fa-user-shield"></i> المستخدمون</div>
+</div>
+
+<!-- ================= MODALS ================= -->
+<div class="modal-overlay open" id="modal-auth" style="z-index: 5000;">
+  <div class="modal" style="max-width: 440px;">
+    <h2 id="auth-title">تسجيل الدخول</h2>
+    <p id="auth-description" style="margin: .7rem 0 1.2rem;"></p>
+    <form id="auth-form" onsubmit="submitAuthForm(event)">
+      <div class="form-group"><label for="auth-username">اسم المستخدم</label><input id="auth-username" required autocomplete="username"></div>
+      <div class="form-group"><label for="auth-password">كلمة المرور</label><input id="auth-password" type="password" required autocomplete="current-password"></div>
+      <div id="auth-confirm-group" class="form-group" style="display:none;"><label for="auth-confirm-password">تأكيد كلمة المرور</label><input id="auth-confirm-password" type="password" autocomplete="new-password"></div>
+      <p id="auth-error" role="alert" style="color:#dc2626;min-height:1.4em;"></p>
+      <button class="btn btn-primary" id="auth-submit" type="submit" style="width:100%;">دخول</button>
+    </form>
+  </div>
+</div>
+<!-- Modal Edit Student Info (Phone & Name) -->
+<div class="modal-overlay" id="modal-edit-student" style="z-index: 1600;">
+  <div class="modal" style="max-width: 460px;">
+    <div class="modal-header">
+      <h3 style="font-size: 1.15rem; font-weight: 800;"><i class="fa-solid fa-user-pen" style="color: var(--primary-light);"></i> تعديل بيانات الطالب / رقم الهاتف 🔒</h3>
+      <button class="modal-close" onclick="closeModal('modal-edit-student')">&times;</button>
+    </div>
+    <input type="hidden" id="edit-stu-idx">
+    <div class="form-group">
+      <label>اسم الطالب *</label>
+      <input type="text" id="edit-stu-name" placeholder="اسم الطالب">
+    </div>
+    <div class="form-group">
+      <label>رقم الهاتف / الموبايل *</label>
+      <input type="tel" id="edit-stu-phone" placeholder="أدخل رقم الموبايل (مثال: 010xxxxxxxx)">
+    </div>
+    <div class="form-group">
+      <label>سعر الكورس (ج.م)</label>
+      <input type="number" id="edit-stu-fee" placeholder="سعر الكورس">
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-edit-student')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveEditedStudent()"><i class="fa-solid fa-check"></i> حفظ التعديلات</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Printable Course Sheet & Share -->
+<div class="modal-overlay" id="modal-print-course" style="z-index: 1700;">
+  <div class="modal" style="max-width: 750px; width: 95%;">
+    <div class="modal-header no-print">
+      <h3 style="font-size: 1.2rem; font-weight: 800;"><i class="fa-solid fa-file-invoice" style="color: var(--primary-light);"></i> كشف حساب وطباعة المادة</h3>
+      <button class="modal-close" onclick="closeModal('modal-print-course')">&times;</button>
+    </div>
+
+    <!-- Printable Area -->
+    <div id="printable-sheet-area" style="background: white; padding: 15px; border-radius: 10px;">
+      <div style="text-align: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px;">
+        <h2 style="color: #1e3a8a; font-size: 1.5rem; font-weight: 900; margin-bottom: 3px;">سنتر آسيا | ASIA CENTER</h2>
+        <h4 id="print-sheet-title" style="color: #334155; font-size: 1.15rem; font-weight: 700;">كشف حساب مادة: </h4>
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #64748b; margin-top: 8px;">
+          <span>تاريخ الطباعة: <b id="print-sheet-date"></b></span>
+          <span>إجمالي المقيدين: <b id="print-sheet-count">0</b> طالب</span>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: right;">
+          <thead>
+            <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+              <th style="padding: 8px; border: 1px solid #cbd5e1;">م</th>
+              <th style="padding: 8px; border: 1px solid #cbd5e1;">اسم الطالب</th>
+              <th style="padding: 8px; border: 1px solid #cbd5e1;">رقم الهاتف</th>
+              <th style="padding: 8px; border: 1px solid #cbd5e1;">سعر الكورس</th>
+              <th style="padding: 8px; border: 1px solid #cbd5e1;">المدفوع</th>
+              <th style="padding: 8px; border: 1px solid #cbd5e1;">المتبقي</th>
+              <th style="padding: 8px; border: 1px solid #cbd5e1; text-align: center;">الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="print-sheet-tbody">
+            <!-- Rendered by JS -->
+          </tbody>
+          <tfoot>
+            <tr style="background: #e2e8f0; font-weight: bold; border-top: 2px solid #94a3b8;">
+              <td colspan="3" style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;">الإجمالي العام للكشف</td>
+              <td id="print-total-fee" style="padding: 10px; border: 1px solid #cbd5e1;">0 ج.م</td>
+              <td id="print-total-paid" style="padding: 10px; border: 1px solid #cbd5e1; color: #16a34a;">0 ج.م</td>
+              <td id="print-total-rem" style="padding: 10px; border: 1px solid #cbd5e1; color: #dc2626;">0 ج.م</td>
+              <td id="print-total-status" style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;">-</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div style="margin-top: 20px; font-size: 0.8rem; color: #64748b; display: flex; justify-content: space-between;">
+        <span>تم استخراج هذا التقرير من منظومة سنتر آسيا</span>
+        <span>توقيع المسؤول: .......................</span>
+      </div>
+    </div>
+
+    <!-- Modal Actions (Hidden in Print) -->
+    <div class="no-print" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.5rem; flex-wrap: wrap;">
+      <button class="btn btn-outline" onclick="closeModal('modal-print-course')">إغلاق</button>
+      <button class="btn btn-accent" onclick="shareCourseSheetWhatsApp()"><i class="fa-brands fa-whatsapp"></i> مشاركة عبر واتساب</button>
+      <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> طباعة / حفظ كـ PDF</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Modal Change Password -->
+<div class="modal-overlay" id="modal-change-password" style="z-index: 1500;">
+  <div class="modal" style="max-width: 440px;">
+    <div class="modal-header">
+      <h3 style="font-size: 1.15rem; font-weight: 800;"><i class="fa-solid fa-key" style="color: var(--accent);"></i> تغيير كلمة المرور (الباسوورد)</h3>
+      <button class="modal-close" onclick="closeModal('modal-change-password')">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>كلمة المرور الحالية *</label>
+      <input type="password" id="current-pwd-input" placeholder="أدخل كلمة المرور الحالية">
+    </div>
+    <div class="form-group">
+      <label>كلمة المرور الجديدة *</label>
+      <input type="password" id="new-pwd-input" placeholder="أدخل الباسوورد الجديد">
+    </div>
+    <div class="form-group">
+      <label>تأكيد كلمة المرور الجديدة *</label>
+      <input type="password" id="confirm-pwd-input" placeholder="أعد إدخال الباسوورد الجديد">
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-change-password')">إلغاء</button>
+      <button class="btn btn-success" onclick="saveNewPassword()"><i class="fa-solid fa-check"></i> حفظ الباسوورد الجديد</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Cloud & Backup Info -->
+<div class="modal-overlay" id="modal-backup-info" style="z-index: 1500;">
+  <div class="modal" style="max-width: 520px;">
+    <div class="modal-header">
+      <h3 style="font-size: 1.15rem; font-weight: 800;"><i class="fa-solid fa-shield-halved" style="color: #10b981;"></i> أمان ونسخ البيانات (إيميل وجوجل درايف)</h3>
+      <button class="modal-close" onclick="closeModal('modal-backup-info')">&times;</button>
+    </div>
+    <div style="font-size: 0.9rem; line-height: 1.7; color: var(--text);">
+      <p style="margin-bottom: 0.8rem;">
+        ✅ <b>البرنامج دائم ملكك للأبد:</b> البيانات محفوظة في ملف داخل مجلد database، بدون اشتراكات أو سيرفرات مدفوعة.
+      </p>
+      <div style="background: #f8fafc; padding: 1.2rem; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+        <button class="btn btn-primary" onclick="exportDataBackup()"><i class="fa-solid fa-download"></i> تحميل نسخة احتياطية كاملة (.json)</button>
+        <button class="btn btn-accent" onclick="sendBackupToEmail()"><i class="fa-solid fa-envelope"></i> إرسال نسخة احتياطية إلى البريد</button>
+        <button class="btn btn-outline" onclick="document.getElementById('import-file-input').click()"><i class="fa-solid fa-upload"></i> استرجاع نسخة احتياطية سابقة من ملف</button>
+        <input type="file" id="import-file-input" style="display: none;" accept=".json" onchange="importDataBackup(event)">
+      </div>
+      <p style="font-size: 0.82rem; color: var(--text-muted);">
+        💡 للإعداد مرة واحدة: فعّل التحقق بخطوتين في Google وأنشئ كلمة مرور تطبيق. أضف متغيري Windows للمستخدم
+        <b>ASIA_GMAIL_ADDRESS</b> (بريد المرسل) و<b>ASIA_GMAIL_APP_PASSWORD</b> (كلمة مرور التطبيق)، ثم أغلق start.bat وأعد تشغيله.
+        لا تستخدم كلمة مرور Gmail العادية. يتطلب الإرسال حسابًا مسجلًا بصلاحية النسخ الاحتياطية.
+      </p>
+    </div>
+    <div style="text-align: left; margin-top: 1rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-backup-info')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Edit Course -->
+<div class="modal-overlay" id="modal-edit-course">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 style="font-size: 1.15rem; font-weight: 700;">تعديل بيانات المادة 🔒</h3>
+      <button class="modal-close" onclick="closeModal('modal-edit-course')">&times;</button>
+    </div>
+    <input type="hidden" id="edit-course-idx">
+    <div class="form-group">
+      <label>اسم المادة والمجموعة *</label>
+      <input type="text" id="edit-course-name" placeholder="اسم المادة">
+    </div>
+    <div class="form-group">
+      <label>اسم المعيد</label>
+      <input type="text" id="edit-course-prof" placeholder="اسم المعيد">
+    </div>
+    <div class="form-group">
+      <label>سعر الكورس الافتراضي (ج.م) *</label>
+      <input type="number" id="edit-course-fee" min="1" step="any">
+    </div>
+    <div class="form-group">
+      <label>نسبة المعيد من سعر الكورس (%) *</label>
+      <input type="number" id="edit-course-instructor-percentage" min="0" max="100" step="0.01">
+      <small style="color: var(--text-muted);">نسبة السنتر تُحسب تلقائياً كباقي المبلغ.</small>
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-edit-course')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveEditedCourse()"><i class="fa-solid fa-check"></i> حفظ التعديلات</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Add Student to Course -->
+<div class="modal-overlay" id="modal-add-student">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 style="font-size: 1.15rem; font-weight: 700;">إضافة طالب جديد للمادة</h3>
+      <button class="modal-close" onclick="closeModal('modal-add-student')">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>اسم الطالب *</label>
+      <input type="text" id="new-stu-name" placeholder="أدخل اسم الطالب رباعي">
+    </div>
+    <div class="form-group">
+      <label>رقم الموبايل *</label>
+      <input type="tel" id="new-stu-phone" placeholder="01xxxxxxxxx">
+    </div>
+    <div class="form-group">
+      <label>سعر الكورس لهذه المادة</label>
+      <input type="number" id="new-stu-fee" value="2200">
+    </div>
+    <div class="form-group">
+      <label>المبلغ المدفوع مقدماً (إن وجد)</label>
+      <input type="number" id="new-stu-paid" value="0">
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-add-student')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveNewStudentToCurrentCourse()">حفظ الطالب</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Edit Workspace Visit -->
+<div class="modal-overlay" id="modal-edit-workspace">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 style="font-size: 1.15rem; font-weight: 700;">تعديل سجل الورك سبيس 🔒</h3>
+      <button class="modal-close" onclick="closeModal('modal-edit-workspace')">&times;</button>
+    </div>
+    <input type="hidden" id="edit-ws-idx">
+    <div class="form-group">
+      <label>التاريخ *</label>
+      <input type="date" id="edit-ws-date">
+    </div>
+    <div class="form-group">
+      <label>اسم الطالب *</label>
+      <input type="text" id="edit-ws-name">
+    </div>
+    <div class="form-group">
+      <label>رقم الموبايل</label>
+      <input type="tel" id="edit-ws-phone">
+    </div>
+    <div class="form-group">
+      <label>وقت الدخول</label>
+      <input type="time" id="edit-ws-time-in">
+    </div>
+    <div class="form-group">
+      <label>وقت الخروج</label>
+      <input type="time" id="edit-ws-time-out">
+    </div>
+    <div class="form-group">
+      <label>المبلغ المحصل (ج.م) *</label>
+      <input type="number" id="edit-ws-total" min="0" step="any">
+    </div>
+    <div class="form-group">
+      <label>ملاحظات أو إضافات</label>
+      <input type="text" id="edit-ws-extra">
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-edit-workspace')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveEditedWorkspaceEntry()"><i class="fa-solid fa-check"></i> حفظ التعديلات</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Pay Course Installment -->
+<div class="modal-overlay" id="modal-pay-course">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 style="font-size: 1.15rem; font-weight: 700;">تسديد دفعة كورس للطالب 🔒</h3>
+      <button class="modal-close" onclick="closeModal('modal-pay-course')">&times;</button>
+    </div>
+    <input type="hidden" id="pay-student-idx">
+    <div class="form-group">
+      <label>اسم الطالب</label>
+      <input type="text" id="pay-student-name" disabled style="background: #f1f5f9;">
+    </div>
+    <div class="form-group">
+      <label>مبلغ الدفعة الجديدة (ج.م) *</label>
+      <input type="number" id="pay-amount-input" placeholder="مثال: 500 أو 1000">
+    </div>
+    <div class="form-group">
+      <label>تاريخ الدفع *</label>
+      <input type="date" id="pay-date-input">
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-pay-course')">إلغاء</button>
+      <button class="btn btn-success" onclick="confirmPaymentCourse()">تأكيد واستلام المبلغ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Add Course -->
+<div class="modal-overlay" id="modal-add-course">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 style="font-size: 1.15rem; font-weight: 700;">إضافة مادة / كورس جديد 🔒</h3>
+      <button class="modal-close" onclick="closeModal('modal-add-course')">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>اسم المادة والمجموعة *</label>
+      <input type="text" id="new-course-name" placeholder="مثال: فيزياء 2 مجموعة 3">
+    </div>
+    <div class="form-group">
+      <label>اسم معيد المادة</label>
+      <input type="text" id="new-course-prof" placeholder="مثال: م/ أحمد إبراهيم">
+    </div>
+    <div class="form-group">
+      <label>سعر الكورس الافتراضي (ج.م)</label>
+      <select id="new-course-fee-type" onchange="document.getElementById('custom-fee-div').style.display = this.value === 'custom' ? 'block' : 'none'; updateNewCourseInstructorPercentage()">
+        <option value="2200">2200 ج.م (نسبة السنتر 400ج - المعيد 1800ج)</option>
+        <option value="2500">2500 ج.م (نسبة السنتر 500ج - المعيد 2000ج)</option>
+        <option value="custom">سعر مخصص آخر</option>
+      </select>
+    </div>
+    <div class="form-group" id="custom-fee-div" style="display: none;">
+      <label>أدخل السعر المخصص (ج.م)</label>
+      <input type="number" id="custom-course-fee" value="2000" min="1" step="any" oninput="updateNewCourseInstructorPercentage()">
+    </div>
+    <div class="form-group">
+      <label>نسبة المعيد من سعر الكورس (%) *</label>
+      <input type="number" id="new-course-instructor-percentage" min="0" max="100" step="0.01">
+      <small style="color: var(--text-muted);">تُقترح النسبة حسب قواعد التقسيم الحالية، ويمكنك تعديلها.</small>
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-add-course')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveNewCourse()">إضافة المادة</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Add Workspace Student -->
+<div class="modal-overlay" id="modal-add-workspace">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 style="font-size: 1.15rem; font-weight: 700;">تسجيل طالب بالورك سبيس</h3>
+      <button class="modal-close" onclick="closeModal('modal-add-workspace')">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>التاريخ *</label>
+      <input type="date" id="ws-new-date">
+    </div>
+    <div class="form-group">
+      <label>اسم الطالب *</label>
+      <input type="text" id="ws-new-name" placeholder="اسم الطالب">
+    </div>
+    <div class="form-group">
+      <label>رقم الموبايل</label>
+      <input type="tel" id="ws-new-phone" placeholder="01xxxxxxxxx">
+    </div>
+    <div class="form-group">
+      <label>وقت الدخول</label>
+      <input type="time" id="ws-new-time-in">
+    </div>
+    <div class="form-group">
+      <label>المبلغ المحصل (ج.م) *</label>
+      <input type="number" id="ws-new-total" value="60">
+    </div>
+    <div class="form-group">
+      <label>ملاحظات أو إضافات (مشروبات / سناك)</label>
+      <input type="text" id="ws-new-extra" placeholder="مثال: قهوة + كانز">
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-add-workspace')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveNewWorkspaceEntry()">تسجيل الدخول</button>
+    </div>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+</body>
+</html>
