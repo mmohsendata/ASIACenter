@@ -1,0 +1,9 @@
+/database/
+*_backup*.json
+/_old_single_file.html
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
