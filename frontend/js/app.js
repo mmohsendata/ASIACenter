@@ -1648,16 +1648,18 @@ function importDataBackup(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  requirePin('استرجاع نسخة سابقة: يتطلب باسوورد الإدارة لأنه سيستبدل البيانات الحالية', () => {
+  requirePin('استرجاع نسخة سابقة: يتطلب صلاحية إدارة النسخ الاحتياطية لأنه سيستبدل بيانات النظام', () => {
     const reader = new FileReader();
     reader.onload = async function(e) {
       try {
         const imported = JSON.parse(e.target.result);
-        if (imported.courses && imported.workspace) {
-          if (!imported.dailyPayments) imported.dailyPayments = [];
-          if (!imported.expenses) imported.expenses = [];
-          if (!imported.owners) imported.owners = [];
-          if (!imported.closings) imported.closings = [];
+        const importedData = imported.format === 'asia-center-backup' ? imported.data : imported;
+        if (importedData?.courses && importedData?.workspace) {
+          if (!importedData.dailyPayments) importedData.dailyPayments = [];
+          if (!importedData.expenses) importedData.expenses = [];
+          if (!importedData.owners) importedData.owners = [];
+          if (!importedData.closings) importedData.closings = [];
+          if (!confirm('سيتم استبدال جميع بيانات النظام. النسخة الكاملة ستستبدل أيضًا حسابات المستخدمين والأدوار، وستحتاج إلى تسجيل الدخول مجددًا ببيانات الحسابات الموجودة في النسخة. هل تريد المتابعة؟')) return;
           const response = await fetch('/api/data/restore', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1665,7 +1667,7 @@ function importDataBackup(event) {
           });
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || 'تعذر استعادة النسخة الاحتياطية.');
-          alert('تم استرجاع النسخة الاحتياطية بنجاح تام!');
+          alert('تم استرجاع النسخة الاحتياطية بنجاح. سجّل الدخول مجددًا باستخدام بيانات الحسابات الموجودة في النسخة.');
           location.reload();
         } else {
           alert('الملف المختار غير صالح');
@@ -1676,6 +1678,7 @@ function importDataBackup(event) {
     };
     reader.readAsText(file);
   });
+  event.target.value = '';
 }
 
 

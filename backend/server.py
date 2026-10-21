@@ -196,20 +196,79 @@ def valid_data_shape(data):
     )
 
 
-def send_backup_email(recipient):
-    sender = os.environ.get("ASIA_GMAIL_ADDRESS", "").strip()
-    app_password = re.sub(r"\s+", "", os.environ.get("ASIA_GMAIL_APP_PASSWORD", ""))
-    if not sender or not app_password:
-        raise RuntimeError("Email sender is not configured")
-
-    backup = read_json(DATA_FILE, {
+def default_data():
+    return {
         "courses": [],
         "workspace": [],
         "dailyPayments": [],
         "expenses": [],
         "owners": [],
         "closings": [],
-    })
+    }
+
+
+def valid_user_store(store):
+    if not isinstance(store, dict) or not isinstance(store.get("users"), dict) or not isinstance(store.get("roles"), list):
+        return False
+
+    role_ids = set()
+    for role in store["roles"]:
+        if not isinstance(role, dict):
+            return False
+        role_id = role.get("id")
+        name = role.get("name")
+        permissions = role.get("permissions")
+        if (not isinstance(role_id, str) or not role_id or role_id in role_ids or
+                not isinstance(name, str) or not name or len(name) > 80 or
+                not isinstance(permissions, list) or
+                any(not isinstance(permission, str) or permission not in PERMISSIONS for permission in permissions)):
+            return False
+        role_ids.add(role_id)
+
+    active_user_with_admin_access = False
+    for username, user in store["users"].items():
+        if (not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{3,40}", username) or
+                not isinstance(user, dict) or not isinstance(user.get("active"), bool) or
+                user.get("roleId") not in role_ids):
+            return False
+        password = user.get("password")
+        if not isinstance(password, dict):
+            return False
+        try:
+            salt = bytes.fromhex(password["salt"])
+            digest = bytes.fromhex(password["hash"])
+            iterations = int(password["iterations"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not salt or len(digest) != hashlib.sha256().digest_size or not 100_000 <= iterations <= 1_000_000:
+            return False
+        role = next(item for item in store["roles"] if item["id"] == user["roleId"])
+        if user["active"] and "users.manage" in role["permissions"]:
+            active_user_with_admin_access = True
+
+    return not store["users"] or active_user_with_admin_access
+
+
+def build_full_backup():
+    data = read_json(DATA_FILE, default_data())
+    for key, value in default_data().items():
+        data.setdefault(key, value)
+    return {
+        "format": "asia-center-backup",
+        "version": 1,
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "data": data,
+        "accounts": read_json(USERS_FILE, empty_user_store()),
+    }
+
+
+def send_backup_email(recipient):
+    sender = os.environ.get("ASIA_GMAIL_ADDRESS", "").strip()
+    app_password = re.sub(r"\s+", "", os.environ.get("ASIA_GMAIL_APP_PASSWORD", ""))
+    if not sender or not app_password:
+        raise RuntimeError("Email sender is not configured")
+
+    backup = build_full_backup()
     message = EmailMessage()
     message["Subject"] = f"نسخة احتياطية - بيانات سنتر آسيا بتاريخ {date.today().isoformat()}"
     message["From"] = sender
@@ -329,17 +388,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/data/export":
             if self._require_permission("backups.manage") is None:
                 return
-            data = read_json(DATA_FILE, {
-                "courses": [],
-                "workspace": [],
-                "dailyPayments": [],
-                "expenses": [],
-                "owners": [],
-                "closings": [],
-            })
-            for key in ("courses", "workspace", "dailyPayments", "expenses", "owners", "closings"):
-                data.setdefault(key, [])
-            self._send_json(data)
+            self._send_json(build_full_backup())
             return
         if path in ("/api/admin/users", "/api/admin/roles"):
             identity = self._require_permission("users.manage")
@@ -560,12 +609,37 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(data, dict):
                 self._send_json({"ok": False, "error": "invalid backup structure"}, 400)
                 return
-            for key in ("expenses", "owners", "closings"):
-                data.setdefault(key, [])
-            if not valid_data_shape(data):
+            is_full_backup = data.get("format") == "asia-center-backup"
+            if is_full_backup:
+                if data.get("version") != 1 or not isinstance(data.get("data"), dict):
+                    self._send_json({"ok": False, "error": "unsupported backup format"}, 400)
+                    return
+                backup_data = data["data"]
+                account_store = data.get("accounts")
+                if not valid_user_store(account_store):
+                    self._send_json({"ok": False, "error": "invalid account data in backup"}, 400)
+                    return
+            else:
+                backup_data = data
+                account_store = None
+                for key in ("expenses", "owners", "closings"):
+                    backup_data.setdefault(key, [])
+            if not valid_data_shape(backup_data):
                 self._send_json({"ok": False, "error": "invalid backup structure"}, 400)
                 return
-            write_json(DATA_FILE, data)
+            previous_data = read_json(DATA_FILE, default_data())
+            previous_accounts = read_json(USERS_FILE, empty_user_store()) if is_full_backup else None
+            try:
+                write_json(DATA_FILE, backup_data)
+                if is_full_backup:
+                    write_json(USERS_FILE, account_store)
+            except OSError:
+                write_json(DATA_FILE, previous_data)
+                if is_full_backup:
+                    write_json(USERS_FILE, previous_accounts)
+                raise
+            if is_full_backup:
+                SESSIONS.clear()
             self._send_json({"ok": True})
             return
         if path == "/api/data":
