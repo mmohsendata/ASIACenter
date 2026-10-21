@@ -122,7 +122,12 @@ def data_change_permissions(old, new):
             course = previous or current
             if course and course.get("students"):
                 required.update(("students.manage", "attendance.manage"))
-                if any(student.get("paid") for student in course["students"]):
+                if any(
+                    student.get("paid") or any(
+                        session.get("paid50") for session in student.get("sessions", [])
+                    )
+                    for student in course["students"]
+                ):
                     required.add("payments.manage")
             continue
 

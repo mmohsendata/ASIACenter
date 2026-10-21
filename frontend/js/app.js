@@ -548,6 +548,9 @@ function renderCoursesTable() {
             <button class="btn btn-outline" style="padding: 0.4rem 0.65rem; font-size: 0.82rem;" onclick="openEditCourseModalWithLock(${idx})" title="تعديل المادة">
               <i class="fa-solid fa-pen-to-square"></i>
             </button>
+            <button class="btn btn-danger" style="padding: 0.4rem 0.65rem; font-size: 0.82rem;" onclick="deleteCourseWithLock(${idx})" title="حذف المادة">
+              <i class="fa-solid fa-trash"></i>
+            </button>
           </td>
         </tr>
       `;
@@ -558,6 +561,43 @@ function renderCoursesTable() {
 
 function filterCoursesList() {
   renderCoursesTable();
+}
+
+function deleteCourseWithLock(idx) {
+  requirePin('حذف المادة: حذف المادة وبيانات الطلاب يتطلب صلاحية إدارة المواد', () => {
+    const course = db.courses[idx];
+    if (!course) return;
+    if (course.students.length && !currentPermissions.has('students.manage')) {
+      alert(`ليس لديك صلاحية ${PERMISSION_LABELS['students.manage']}.`);
+      return;
+    }
+    if (course.students.length && !currentPermissions.has('attendance.manage')) {
+      alert(`ليس لديك صلاحية ${PERMISSION_LABELS['attendance.manage']}.`);
+      return;
+    }
+    const hasPayments = course.students.some(student =>
+      student.paid || (student.sessions || []).some(session => session.paid50)
+    );
+    if (hasPayments && !currentPermissions.has('payments.manage')) {
+      alert(`ليس لديك صلاحية ${PERMISSION_LABELS['payments.manage']}.`);
+      return;
+    }
+    const message = `هل أنت متأكد من حذف مادة "${course.name}"؟ سيتم حذف ${course.students.length} طالبًا وسجلات الحضور ورسوم الحصص المرتبطة بها. ستظل دفعات الكورس المسجلة في سجل الإيرادات.`;
+    if (!confirm(message)) return;
+
+    db.courses.splice(idx, 1);
+    if (currentCourseIndex === idx) {
+      document.getElementById('active-course-box').style.display = 'none';
+      currentCourseIndex = null;
+    } else if (currentCourseIndex !== null && currentCourseIndex > idx) {
+      currentCourseIndex -= 1;
+    }
+    saveDB();
+    renderCoursesTable();
+    renderProfessorsTable();
+    renderStudentsDirectory();
+    loadDailyReport();
+  });
 }
 
 function openCourseSessionManager(idx) {
