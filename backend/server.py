@@ -18,10 +18,11 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
-DATABASE = ROOT / "database"
+DATABASE = Path(os.environ.get("DATA_DIR", str(ROOT / "database")))
 DATA_FILE = DATABASE / "db.json"
 USERS_FILE = DATABASE / "users.json"
-PORT = 8080
+HOST = "0.0.0.0"
+PORT = int(os.environ.get("PORT", "8080"))
 SESSION_COOKIE = "asia_session"
 SESSION_MAX_AGE = 8 * 60 * 60
 SESSIONS = {}
@@ -603,15 +604,16 @@ def main():
             "owners": [],
             "closings": [],
         })
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
     url = f"http://127.0.0.1:{PORT}/"
     print("Asia Center is running")
     print(url)
-    print("Close this window to stop.")
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+    if not os.environ.get("RENDER"):
+        print("Close this window to stop.")
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
     try:
         server.serve_forever()
     except KeyboardInterrupt:
