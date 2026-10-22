@@ -10,11 +10,12 @@ import time
 import threading
 import webbrowser
 from http.cookies import SimpleCookie
-from datetime import date
+from datetime import date, datetime, timedelta
 from email.message import EmailMessage
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
@@ -28,6 +29,10 @@ SESSION_COOKIE = "asia_session"
 SESSION_MAX_AGE = 8 * 60 * 60
 SESSIONS = {}
 SETUP_LOCK = threading.Lock()
+DATA_LOCK = threading.RLock()
+BACKUP_TIMEZONE = ZoneInfo("Africa/Cairo")
+BACKUP_HOUR = 5
+BACKUP_MINUTE = 0
 PASSWORD_ITERATIONS = 310_000
 PERMISSIONS = {
     "data.view",
@@ -251,16 +256,55 @@ def valid_user_store(store):
 
 
 def build_full_backup():
-    data = read_json(DATA_FILE, default_data())
-    for key, value in default_data().items():
-        data.setdefault(key, value)
-    return {
-        "format": "asia-center-backup",
-        "version": 1,
-        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "data": data,
-        "accounts": read_json(USERS_FILE, empty_user_store()),
-    }
+    with DATA_LOCK:
+        data = read_json(DATA_FILE, default_data())
+        for key, value in default_data().items():
+            data.setdefault(key, value)
+        return {
+            "format": "asia-center-backup",
+            "version": 1,
+            "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "data": data,
+            "accounts": read_json(USERS_FILE, empty_user_store()),
+        }
+
+
+def daily_backup_path(day):
+    return DATABASE / "backups" / f"asia_center_backup_{day.isoformat()}.json"
+
+
+def run_daily_backup(now):
+    backup_file = daily_backup_path(now.date())
+    with DATA_LOCK:
+        if backup_file.exists():
+            return backup_file
+        write_json(backup_file, build_full_backup())
+    return backup_file
+
+
+def seconds_until_next_daily_backup(now):
+    scheduled_today = now.replace(hour=BACKUP_HOUR, minute=BACKUP_MINUTE, second=0, microsecond=0)
+    if now >= scheduled_today and not daily_backup_path(now.date()).exists():
+        return 0
+    next_backup = scheduled_today if now < scheduled_today else scheduled_today + timedelta(days=1)
+    return max(1, (next_backup - now).total_seconds())
+
+
+def daily_backup_scheduler():
+    while True:
+        now = datetime.now(BACKUP_TIMEZONE)
+        wait_seconds = seconds_until_next_daily_backup(now)
+        if wait_seconds == 0:
+            try:
+                saved_file = run_daily_backup(now)
+                print(f"Daily full backup saved: {saved_file}")
+            except (OSError, ValueError, TypeError) as exc:
+                print(f"Daily full backup failed: {exc}")
+                time.sleep(60)
+                continue
+            continue
+
+        time.sleep(wait_seconds)
 
 
 def send_backup_email(recipient):
@@ -296,11 +340,13 @@ def read_json(path, fallback):
 
 
 def write_json(path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+    path = Path(path)
+    with DATA_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -680,15 +726,9 @@ def main():
         )
     DATABASE.mkdir(parents=True, exist_ok=True)
     if not DATA_FILE.exists():
-        write_json(DATA_FILE, {
-            "courses": [],
-            "workspace": [],
-            "dailyPayments": [],
-            "expenses": [],
-            "owners": [],
-            "closings": [],
-        })
+        write_json(DATA_FILE, default_data())
     server = ThreadingHTTPServer((HOST, PORT), Handler)
+    threading.Thread(target=daily_backup_scheduler, name="daily-full-backup", daemon=True).start()
     url = f"http://127.0.0.1:{PORT}/"
     print("Asia Center is running")
     print(url)
