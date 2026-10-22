@@ -18,7 +18,8 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
-DATABASE = Path(os.environ.get("DATA_DIR", str(ROOT / "database")))
+DEFAULT_DATABASE = "/var/data" if os.environ.get("RENDER") else str(ROOT / "database")
+DATABASE = Path(os.environ.get("DATA_DIR", DEFAULT_DATABASE))
 DATA_FILE = DATABASE / "db.json"
 USERS_FILE = DATABASE / "users.json"
 HOST = "0.0.0.0"
@@ -673,6 +674,10 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
+    if os.environ.get("RENDER") and not DATABASE.is_mount():
+        raise RuntimeError(
+            f"Persistent storage is not mounted at {DATABASE}. Attach a Render persistent disk at this path before starting."
+        )
     DATABASE.mkdir(parents=True, exist_ok=True)
     if not DATA_FILE.exists():
         write_json(DATA_FILE, {
