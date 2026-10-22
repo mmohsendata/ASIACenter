@@ -1,4 +1,4 @@
-let db = { courses: [], workspace: [], dailyPayments: [], expenses: [], owners: [], closings: [] };
+let db = { courses: [], allocations: [], rooms: [], workspace: [], dailyPayments: [], expenses: [], owners: [], closings: [] };
 let currentPermissions = new Set();
 let authSetupRequired = false;
 
@@ -23,7 +23,7 @@ function permissionForAction(promptMsg) {
   if (/ورك سبيس/.test(promptMsg)) return "workspace.manage";
   if (/مصروف/.test(promptMsg)) return "expenses.manage";
   if (/مالك|إقفال|الفترة المالية|توزيع/.test(promptMsg)) return "closing.manage";
-  if (/مادة|الكورس/.test(promptMsg)) return "courses.manage";
+  if (/مادة|الكورس|تخصيص|توزيع|قاعة|قاعات|جدول/.test(promptMsg)) return "courses.manage";
   if (/نسخة احتياطية|نسخة سابقة/.test(promptMsg)) return "backups.manage";
   return "data.view";
 }
@@ -117,6 +117,8 @@ async function initDB() {
   if (!dataRes.ok) throw new Error('ليس لديك صلاحية عرض البيانات.');
   db = await dataRes.json();
   if (!db.courses) db.courses = [];
+  if (!db.allocations) db.allocations = [];
+  if (!db.rooms) db.rooms = [];
   if (!db.workspace) db.workspace = [];
   if (!db.dailyPayments) db.dailyPayments = [];
   if (!db.expenses) db.expenses = [];
@@ -148,6 +150,8 @@ async function initDB() {
       console.error(e);
     }
   }
+  if (!db.allocations) db.allocations = [];
+  if (!db.rooms) db.rooms = [];
 
   return true;
 }
@@ -353,6 +357,7 @@ let currentCourseIndex = null;
 // Tab switcher
 function switchTab(tabId) {
   if (tabId === 'admin' && !currentPermissions.has('users.manage')) return;
+  if (tabId === 'allocation' && !currentPermissions.has('courses.manage')) return;
   document.querySelectorAll('section').forEach(s => s.style.display = 'none');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.bottom-bar-item').forEach(b => b.classList.remove('active'));
@@ -360,7 +365,7 @@ function switchTab(tabId) {
   const activeSec = document.getElementById('tab-' + tabId);
   if (activeSec) activeSec.style.display = 'block';
 
-  const tabs = ['daily', 'courses', 'students', 'professors', 'workspace', 'expenses', 'closing', 'admin'];
+  const tabs = ['daily', 'courses', 'allocation', 'students', 'professors', 'workspace', 'expenses', 'closing', 'admin'];
   const idx = tabs.indexOf(tabId);
   if (idx !== -1) {
     if (document.querySelectorAll('.nav-item')[idx]) document.querySelectorAll('.nav-item')[idx].classList.add('active');
@@ -369,6 +374,7 @@ function switchTab(tabId) {
 
   if (tabId === 'daily') loadDailyReport();
   if (tabId === 'courses') renderCoursesTable();
+  if (tabId === 'allocation') renderAllocationPage();
   if (tabId === 'students') renderStudentsDirectory();
   if (tabId === 'professors') renderProfessorsTable();
   if (tabId === 'workspace') renderWorkspaceTable();
@@ -386,6 +392,224 @@ function switchTab(tabId) {
     renderClosings();
   }
   if (tabId === 'admin') loadAdminPage();
+}
+
+// ================= COURSE ALLOCATION =================
+const ALLOCATION_DAYS = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+
+function allocationId() {
+  return window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+}
+
+function renderAllocationPage() {
+  if (!Array.isArray(db.allocations)) db.allocations = [];
+  if (!Array.isArray(db.rooms)) db.rooms = [];
+  renderAllocationMatrix();
+  renderAllocationRooms();
+}
+
+function renderAllocationMatrix() {
+  const matrix = document.getElementById('allocation-matrix');
+  if (!matrix) return;
+  const slotsByDay = ALLOCATION_DAYS.map((_, day) => db.allocations
+    .map((slot, index) => ({ slot, index }))
+    .filter(item => Number(item.slot.day) === day)
+    .sort((a, b) => a.slot.startTime.localeCompare(b.slot.startTime)));
+
+  matrix.innerHTML = ALLOCATION_DAYS.map((dayName, day) => {
+    const slots = slotsByDay[day].map(({ slot, index }) => {
+      const course = db.courses.find(item => item.name === slot.courseName);
+      const students = course?.students || [];
+      const period = slot.weekStart && slot.weekEnd
+        ? `<div style="font-size:.76rem;color:var(--text-muted);margin-top:.3rem;">${escapeHtml(slot.weekStart)} — ${escapeHtml(slot.weekEnd)}</div>`
+        : '';
+      const roster = students.length
+        ? `<ul class="allocation-students">${students.map(student => `<li>${escapeHtml(student.name || '')}</li>`).join('')}</ul>`
+        : '<div class="allocation-students">لا يوجد طلاب مسجلون</div>';
+      const actions = currentPermissions.has('courses.manage') ? `
+        <div style="display:flex;gap:.4rem;margin-top:.55rem;">
+          <button class="btn btn-outline" style="padding:.2rem .45rem;font-size:.75rem;" onclick="editAllocation(${index})" title="تعديل التخصيص"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;" onclick="deleteAllocation(${index})" title="حذف التخصيص"><i class="fa-solid fa-trash"></i></button>
+        </div>` : '';
+      return `
+        <article class="allocation-slot">
+          <strong>${escapeHtml(slot.courseName)}</strong>
+          <div style="font-size:.86rem;margin-top:.25rem;"><i class="fa-regular fa-clock"></i> ${escapeHtml(slot.startTime)} - ${escapeHtml(slot.endTime)}</div>
+          <div style="font-size:.86rem;"><i class="fa-solid fa-door-open"></i> ${escapeHtml(slot.room)}</div>
+          ${period}
+          <div style="font-size:.8rem;margin-top:.35rem;">${students.length} طالب</div>
+          ${roster}${actions}
+        </article>`;
+    }).join('');
+    return `<div class="allocation-day"><div class="allocation-day-title">${dayName}</div>${slots || '<span style="color:var(--text-muted);font-size:.82rem;">لا توجد حصص</span>'}</div>`;
+  }).join('');
+}
+
+function renderAllocationRooms() {
+  const container = document.getElementById('allocation-rooms-list');
+  if (!container) return;
+  container.innerHTML = db.rooms.length
+    ? db.rooms.map((room, index) => `
+      <span class="allocation-room-chip">
+        ${escapeHtml(room)}
+        ${currentPermissions.has('courses.manage') ? `<button type="button" class="btn btn-danger" style="padding:.15rem .4rem;font-size:.72rem;" onclick="deleteAllocationRoom(${index})" aria-label="حذف ${escapeHtml(room)}"><i class="fa-solid fa-xmark"></i></button>` : ''}
+      </span>`).join('')
+    : '<span style="color:var(--text-muted);">لم تتم إضافة قاعات بعد.</span>';
+}
+
+function addAllocationRoom(event) {
+  event.preventDefault();
+  requirePin('إضافة قاعة جديدة تتطلب صلاحية إدارة المواد والتخصيصات', () => {
+    const input = document.getElementById('allocation-room-name');
+    const room = input.value.trim();
+    if (!room) return;
+    if (db.rooms.some(existing => existing.toLocaleLowerCase() === room.toLocaleLowerCase())) {
+      alert('هذه القاعة موجودة بالفعل.');
+      return;
+    }
+    db.rooms.push(room);
+    db.rooms.sort((a, b) => a.localeCompare(b, 'ar'));
+    saveDB();
+    input.value = '';
+    renderAllocationRooms();
+  });
+}
+
+function deleteAllocationRoom(index) {
+  const room = db.rooms[index];
+  if (!room) return;
+  if (db.allocations.some(slot => slot.room === room)) {
+    alert('لا يمكن حذف القاعة قبل نقل أو حذف التخصيصات المرتبطة بها.');
+    return;
+  }
+  requirePin('حذف قاعة يتطلب صلاحية إدارة المواد والتخصيصات', () => {
+    if (!confirm(`حذف القاعة "${room}"؟`)) return;
+    db.rooms.splice(index, 1);
+    saveDB();
+    renderAllocationRooms();
+  });
+}
+
+function openAllocationModal(id = '') {
+  if (!currentPermissions.has('courses.manage')) {
+    alert(`ليس لديك صلاحية ${PERMISSION_LABELS['courses.manage']}.`);
+    return;
+  }
+  if (!db.courses.length) {
+    alert('أضف مادة أولاً قبل إنشاء تخصيص.');
+    return;
+  }
+  if (!db.rooms.length) {
+    alert('أضف قاعة واحدة على الأقل قبل إنشاء تخصيص.');
+    return;
+  }
+  const courseSelect = document.getElementById('allocation-course');
+  courseSelect.innerHTML = db.courses.map(course =>
+    `<option value="${escapeHtml(course.name)}">${escapeHtml(course.name)}</option>`
+  ).join('');
+  document.getElementById('allocation-day').innerHTML = ALLOCATION_DAYS.map((day, index) =>
+    `<option value="${index}">${day}</option>`
+  ).join('');
+  document.getElementById('allocation-room').innerHTML = db.rooms.map(room =>
+    `<option value="${escapeHtml(room)}">${escapeHtml(room)}</option>`
+  ).join('');
+  document.getElementById('allocation-id').value = id;
+  document.getElementById('allocation-modal-title').textContent = id ? 'تعديل تخصيص مادة' : 'إضافة تخصيص مادة';
+  if (id) {
+    const slot = db.allocations.find(item => item.id === id);
+    if (!slot) return;
+    courseSelect.value = slot.courseName;
+    document.getElementById('allocation-day').value = String(slot.day);
+    document.getElementById('allocation-start').value = slot.startTime;
+    document.getElementById('allocation-end').value = slot.endTime;
+    document.getElementById('allocation-room').value = slot.room;
+    document.getElementById('allocation-week-start').value = slot.weekStart || '';
+    document.getElementById('allocation-week-end').value = slot.weekEnd || '';
+  } else {
+    document.getElementById('allocation-start').value = '09:00';
+    document.getElementById('allocation-end').value = '10:00';
+    document.getElementById('allocation-week-start').value = '';
+    document.getElementById('allocation-week-end').value = '';
+  }
+  document.getElementById('modal-allocation').classList.add('open');
+}
+
+function editAllocation(index) {
+  const slot = db.allocations[index];
+  if (slot) openAllocationModal(slot.id);
+}
+
+function allocationDateRangesOverlap(left, right) {
+  const leftStart = left.weekStart || '0000-01-01';
+  const rightStart = right.weekStart || '0000-01-01';
+  const leftEnd = left.weekEnd || '9999-12-31';
+  const rightEnd = right.weekEnd || '9999-12-31';
+  return leftStart <= rightEnd && rightStart <= leftEnd;
+}
+
+function allocationConflicts(candidate, ignoredId = '') {
+  return db.allocations.find(slot =>
+    slot.id !== ignoredId &&
+    Number(slot.day) === candidate.day &&
+    slot.room === candidate.room &&
+    candidate.startTime < slot.endTime &&
+    slot.startTime < candidate.endTime &&
+    allocationDateRangesOverlap(candidate, slot)
+  );
+}
+
+function saveAllocation() {
+  const id = document.getElementById('allocation-id').value;
+  const slot = {
+    id: id || allocationId(),
+    courseName: document.getElementById('allocation-course').value,
+    day: Number(document.getElementById('allocation-day').value),
+    startTime: document.getElementById('allocation-start').value,
+    endTime: document.getElementById('allocation-end').value,
+    room: document.getElementById('allocation-room').value,
+    weekStart: document.getElementById('allocation-week-start').value,
+    weekEnd: document.getElementById('allocation-week-end').value
+  };
+  if (!slot.courseName || !Number.isInteger(slot.day) || slot.day < 0 || slot.day >= ALLOCATION_DAYS.length ||
+      !slot.startTime || !slot.endTime || slot.startTime >= slot.endTime || !slot.room) {
+    alert('أدخل المادة واليوم والقاعة ووقتًا صحيحًا (وقت النهاية بعد البداية).');
+    return;
+  }
+  if (Boolean(slot.weekStart) !== Boolean(slot.weekEnd) ||
+      (slot.weekStart && slot.weekStart > slot.weekEnd)) {
+    alert('أدخل تاريخ بداية ونهاية الفترة معًا، واجعل البداية قبل النهاية أو مساوية لها.');
+    return;
+  }
+  if (!db.courses.some(course => course.name === slot.courseName) || !db.rooms.includes(slot.room)) {
+    alert('المادة أو القاعة المحددة لم تعد متاحة. حدّث الصفحة واختر من جديد.');
+    return;
+  }
+  const conflict = allocationConflicts(slot, id);
+  if (conflict) {
+    alert(`تعارض في ${slot.room}: توجد حصة "${conflict.courseName}" في الوقت المتداخل نفسه يوم ${ALLOCATION_DAYS[slot.day]}.`);
+    return;
+  }
+
+  requirePin('تعديل توزيع المواد على القاعات والأوقات يتطلب صلاحية إدارة المواد', () => {
+    const index = db.allocations.findIndex(item => item.id === id);
+    if (index >= 0) db.allocations[index] = slot;
+    else db.allocations.push(slot);
+    db.allocations.sort((a, b) => Number(a.day) - Number(b.day) || a.startTime.localeCompare(b.startTime));
+    saveDB();
+    closeModal('modal-allocation');
+    renderAllocationPage();
+  });
+}
+
+function deleteAllocation(index) {
+  const slot = db.allocations[index];
+  if (!slot) return;
+  requirePin('حذف تخصيص مادة يتطلب صلاحية إدارة المواد', () => {
+    if (!confirm(`حذف تخصيص "${slot.courseName}" يوم ${ALLOCATION_DAYS[slot.day]}؟`)) return;
+    db.allocations.splice(index, 1);
+    saveDB();
+    renderAllocationPage();
+  });
 }
 
 // Set Today Date helper
@@ -586,6 +810,7 @@ function deleteCourseWithLock(idx) {
     if (!confirm(message)) return;
 
     db.courses.splice(idx, 1);
+    db.allocations = db.allocations.filter(slot => slot.courseName !== course.name);
     if (currentCourseIndex === idx) {
       document.getElementById('active-course-box').style.display = 'none';
       currentCourseIndex = null;
@@ -1548,6 +1773,10 @@ function saveEditedCourse() {
   db.dailyPayments.forEach(payment => {
     if (payment.courseName === oldName) payment.courseName = name;
   });
+  db.allocations.forEach(slot => {
+    if (slot.courseName === oldName) slot.courseName = name;
+  });
+  renderAllocationPage();
   saveDB();
   closeModal('modal-edit-course');
   renderCoursesTable();
@@ -1659,6 +1888,8 @@ function importDataBackup(event) {
           if (!importedData.expenses) importedData.expenses = [];
           if (!importedData.owners) importedData.owners = [];
           if (!importedData.closings) importedData.closings = [];
+          if (!importedData.allocations) importedData.allocations = [];
+          if (!importedData.rooms) importedData.rooms = [];
           if (!confirm('سيتم استبدال جميع بيانات النظام. النسخة الكاملة ستستبدل أيضًا حسابات المستخدمين والأدوار، وستحتاج إلى تسجيل الدخول مجددًا ببيانات الحسابات الموجودة في النسخة. هل تريد المتابعة؟')) return;
           const response = await fetch('/api/data/restore', {
             method: 'POST',

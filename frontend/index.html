@@ -40,6 +40,7 @@
 <div class="nav-bar">
   <div class="nav-item active" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> تصفية دخل اليوم</div>
   <div class="nav-item" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> إدارة المواد والحصص</div>
+  <div class="nav-item" data-permission="courses.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> توزيع القاعات والجداول</div>
   <div class="nav-item" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> بحث وشيت الطلاب</div>
   <div class="nav-item" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> حسابات المعيدين ونسبة السنتر</div>
   <div class="nav-item" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> شيت الورك سبيس</div>
@@ -196,6 +197,36 @@
           </tbody>
         </table>
       </div>
+    </div>
+  </section>
+
+  <section id="tab-allocation" style="display: none;">
+    <div class="box">
+      <div class="box-header">
+        <div>
+          <div class="box-title"><i class="fa-solid fa-table-cells" style="color: var(--primary-light);"></i> توزيع المواد على القاعات والجدول الأسبوعي</div>
+          <p style="font-size:.88rem;color:var(--text-muted);margin-top:.35rem;">عرض أسبوعي من السبت إلى الجمعة. يمكن تخصيص أكثر من موعد للمادة وتحديد فترة الأسابيع.</p>
+        </div>
+        <button class="btn btn-primary" data-permission="courses.manage" onclick="openAllocationModal()"><i class="fa-solid fa-plus"></i> إضافة تخصيص</button>
+      </div>
+      <div id="allocation-matrix" class="allocation-matrix"></div>
+    </div>
+
+    <div class="box">
+      <div class="box-header">
+        <div>
+          <div class="box-title"><i class="fa-solid fa-door-open" style="color:var(--accent);"></i> إدارة القاعات</div>
+          <p style="font-size:.88rem;color:var(--text-muted);margin-top:.35rem;">أضف أسماء القاعات لاستخدامها في التخصيصات. لا يمكن حذف قاعة مرتبطة بموعد.</p>
+        </div>
+      </div>
+      <form onsubmit="addAllocationRoom(event)" data-permission="courses.manage" style="display:flex;gap:.7rem;flex-wrap:wrap;align-items:end;">
+        <div class="form-group" style="margin:0;min-width:220px;">
+          <label for="allocation-room-name">اسم القاعة</label>
+          <input id="allocation-room-name" maxlength="80" required placeholder="مثال: القاعة 1">
+        </div>
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i> إضافة قاعة</button>
+      </form>
+      <div id="allocation-rooms-list" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem;"></div>
     </div>
   </section>
 
@@ -425,6 +456,7 @@
 <div class="bottom-bar">
   <div class="bottom-bar-item active" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> اليومية</div>
   <div class="bottom-bar-item" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> الحصص</div>
+  <div class="bottom-bar-item" data-permission="courses.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> التوزيع</div>
   <div class="bottom-bar-item" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> الطلاب</div>
   <div class="bottom-bar-item" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> المعيدين</div>
   <div class="bottom-bar-item" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> ورك سبيس</div>
@@ -434,6 +466,32 @@
 </div>
 
 <!-- ================= MODALS ================= -->
+<div class="modal-overlay" id="modal-allocation">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <h3 id="allocation-modal-title" style="font-size:1.15rem;font-weight:800;">إضافة تخصيص مادة</h3>
+      <button class="modal-close" onclick="closeModal('modal-allocation')">&times;</button>
+    </div>
+    <input type="hidden" id="allocation-id">
+    <div class="form-group"><label for="allocation-course">المادة *</label><select id="allocation-course" required></select></div>
+    <div class="form-group"><label for="allocation-day">اليوم *</label><select id="allocation-day" required></select></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.8rem;">
+      <div class="form-group"><label for="allocation-start">من الساعة *</label><input type="time" id="allocation-start" required></div>
+      <div class="form-group"><label for="allocation-end">إلى الساعة *</label><input type="time" id="allocation-end" required></div>
+    </div>
+    <div class="form-group"><label for="allocation-room">القاعة *</label><select id="allocation-room" required></select></div>
+    <p style="font-size:.84rem;color:var(--text-muted);margin:.7rem 0;">اترك تاريخي الأسابيع فارغين ليكون الموعد أسبوعيًا بلا تاريخ انتهاء. لتحديد فترة، أدخل تاريخ البداية والنهاية معًا.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem;">
+      <div class="form-group"><label for="allocation-week-start">ساري من أسبوع (اختياري)</label><input type="date" id="allocation-week-start"></div>
+      <div class="form-group"><label for="allocation-week-end">حتى أسبوع (اختياري)</label><input type="date" id="allocation-week-end"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1rem;">
+      <button class="btn btn-outline" onclick="closeModal('modal-allocation')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveAllocation()">حفظ التخصيص</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay open" id="modal-auth" style="z-index: 5000;">
   <div class="modal" style="max-width: 440px;">
     <h2 id="auth-title">تسجيل الدخول</h2>

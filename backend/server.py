@@ -107,6 +107,8 @@ def data_change_permissions(old, new):
     required = set()
 
     for field, permission in (
+        ("allocations", "courses.manage"),
+        ("rooms", "courses.manage"),
         ("dailyPayments", "payments.manage"),
         ("workspace", "workspace.manage"),
         ("expenses", "expenses.manage"),
@@ -182,7 +184,7 @@ def data_change_permissions(old, new):
                     elif old_session.get("paid50") != new_session.get("paid50"):
                         required.add("payments.manage")
 
-    known_fields = {"courses", "dailyPayments", "workspace", "expenses", "owners", "closings"}
+    known_fields = {"courses", "allocations", "rooms", "dailyPayments", "workspace", "expenses", "owners", "closings"}
     if (set(old) - known_fields != set(new) - known_fields or
             any(old.get(key) != new.get(key) for key in set(old) - known_fields)):
         required.add("users.manage")
@@ -190,21 +192,73 @@ def data_change_permissions(old, new):
 
 
 def valid_data_shape(data):
-    list_fields = ("courses", "workspace", "dailyPayments", "expenses", "owners", "closings")
+    list_fields = ("courses", "allocations", "workspace", "dailyPayments", "expenses", "owners", "closings")
     if not isinstance(data, dict) or any(not isinstance(data.get(field), list) for field in list_fields):
+        return False
+    if not isinstance(data.get("rooms"), list):
         return False
     if any(not isinstance(entry, dict) for field in list_fields for entry in data[field]):
         return False
-    return all(
+    if not all(
         isinstance(course.get("students", []), list) and
         all(isinstance(student, dict) for student in course.get("students", []))
         for course in data["courses"]
-    )
+    ):
+        return False
+
+    rooms = data["rooms"]
+    if (any(not isinstance(room, str) or not room.strip() or len(room) > 80 for room in rooms) or
+            len({room.casefold() for room in rooms}) != len(rooms)):
+        return False
+    course_names = {course.get("name") for course in data["courses"] if isinstance(course.get("name"), str)}
+    allocation_ids = set()
+    for slot in data["allocations"]:
+        slot_id = slot.get("id")
+        course_name = slot.get("courseName")
+        day = slot.get("day")
+        start_time = slot.get("startTime")
+        end_time = slot.get("endTime")
+        room = slot.get("room")
+        week_start = slot.get("weekStart", "")
+        week_end = slot.get("weekEnd", "")
+        if (not isinstance(slot_id, str) or not slot_id or slot_id in allocation_ids or
+                not isinstance(course_name, str) or course_name not in course_names or
+                not isinstance(day, int) or isinstance(day, bool) or not 0 <= day <= 6 or
+                not isinstance(start_time, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", start_time) or
+                not isinstance(end_time, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", end_time) or
+                start_time >= end_time or room not in rooms or
+                not isinstance(week_start, str) or not isinstance(week_end, str) or
+                bool(week_start) != bool(week_end)):
+            return False
+        if week_start:
+            try:
+                start_date = date.fromisoformat(week_start)
+                end_date = date.fromisoformat(week_end)
+                if (start_date.isoformat() != week_start or end_date.isoformat() != week_end or
+                        start_date > end_date):
+                    return False
+            except ValueError:
+                return False
+        allocation_ids.add(slot_id)
+
+    for index, slot in enumerate(data["allocations"]):
+        for other in data["allocations"][index + 1:]:
+            if (slot["day"] == other["day"] and slot["room"] == other["room"] and
+                    slot["startTime"] < other["endTime"] and other["startTime"] < slot["endTime"]):
+                slot_start = slot["weekStart"] or "0000-01-01"
+                other_start = other["weekStart"] or "0000-01-01"
+                slot_end = slot["weekEnd"] or "9999-12-31"
+                other_end = other["weekEnd"] or "9999-12-31"
+                if slot_start <= other_end and other_start <= slot_end:
+                    return False
+    return True
 
 
 def default_data():
     return {
         "courses": [],
+        "allocations": [],
+        "rooms": [],
         "workspace": [],
         "dailyPayments": [],
         "expenses": [],
@@ -425,6 +479,8 @@ class Handler(SimpleHTTPRequestHandler):
                 "closings": [],
             })
             data.setdefault("courses", [])
+            data.setdefault("allocations", [])
+            data.setdefault("rooms", [])
             data.setdefault("workspace", [])
             data.setdefault("dailyPayments", [])
             data.setdefault("expenses", [])
@@ -669,8 +725,8 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 backup_data = data
                 account_store = None
-                for key in ("expenses", "owners", "closings"):
-                    backup_data.setdefault(key, [])
+            for key, value in default_data().items():
+                backup_data.setdefault(key, value)
             if not valid_data_shape(backup_data):
                 self._send_json({"ok": False, "error": "invalid backup structure"}, 400)
                 return
@@ -702,6 +758,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "invalid data"}, 400)
                 return
             data.setdefault("courses", [])
+            data.setdefault("allocations", [])
+            data.setdefault("rooms", [])
             data.setdefault("workspace", [])
             data.setdefault("dailyPayments", [])
             data.setdefault("expenses", [])
