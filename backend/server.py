@@ -14,7 +14,9 @@ from datetime import date
 from email.message import EmailMessage
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, unquote, urlencode
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
@@ -28,6 +30,13 @@ SESSION_MAX_AGE = 8 * 60 * 60
 SESSIONS = {}
 SETUP_LOCK = threading.Lock()
 PASSWORD_ITERATIONS = 310_000
+GOOGLE_DRIVE_FILES = {
+    DATA_FILE.name: DATA_FILE,
+    USERS_FILE.name: USERS_FILE,
+}
+GOOGLE_DRIVE_LOCK = threading.RLock()
+GOOGLE_DRIVE_TOKEN = None
+GOOGLE_DRIVE_TOKEN_EXPIRES = 0
 PERMISSIONS = {
     "data.view",
     "courses.manage",
@@ -41,6 +50,191 @@ PERMISSIONS = {
     "users.manage",
 }
 ALL_PERMISSIONS = sorted(PERMISSIONS)
+
+
+class GoogleDrivePersistenceError(RuntimeError):
+    pass
+
+
+def google_drive_settings():
+    names = (
+        "GOOGLE_DRIVE_CLIENT_ID",
+        "GOOGLE_DRIVE_CLIENT_SECRET",
+        "GOOGLE_DRIVE_REFRESH_TOKEN",
+        "GOOGLE_DRIVE_FOLDER_ID",
+    )
+    values = {name: os.environ.get(name, "").strip() for name in names}
+    if not any(values.values()):
+        return None
+    if not all(values.values()):
+        missing = ", ".join(name for name, value in values.items() if not value)
+        raise GoogleDrivePersistenceError(f"Google Drive configuration is incomplete; missing: {missing}")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", values["GOOGLE_DRIVE_FOLDER_ID"]):
+        raise GoogleDrivePersistenceError("Google Drive folder ID has an invalid format")
+    return values
+
+
+def _google_response_error(response_body):
+    try:
+        payload = json.loads(response_body.decode("utf-8"))
+        error = payload.get("error", {})
+        if isinstance(error, dict):
+            return str(error.get("message") or error.get("status") or "unknown error")
+        return str(error)
+    except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+        return "unknown error"
+
+
+def _google_drive_access_token(settings):
+    global GOOGLE_DRIVE_TOKEN, GOOGLE_DRIVE_TOKEN_EXPIRES
+    with GOOGLE_DRIVE_LOCK:
+        if GOOGLE_DRIVE_TOKEN and GOOGLE_DRIVE_TOKEN_EXPIRES > time.time() + 60:
+            return GOOGLE_DRIVE_TOKEN
+        body = urlencode({
+            "client_id": settings["GOOGLE_DRIVE_CLIENT_ID"],
+            "client_secret": settings["GOOGLE_DRIVE_CLIENT_SECRET"],
+            "refresh_token": settings["GOOGLE_DRIVE_REFRESH_TOKEN"],
+            "grant_type": "refresh_token",
+        }).encode("ascii")
+        request = Request(
+            "https://oauth2.googleapis.com/token",
+            data=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                token_data = json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            detail = _google_response_error(exc.read()) if isinstance(exc, HTTPError) else str(exc)
+            raise GoogleDrivePersistenceError(f"Google Drive authorization failed: {detail}") from exc
+        token = token_data.get("access_token")
+        if not isinstance(token, str) or not token:
+            raise GoogleDrivePersistenceError("Google Drive authorization response did not include an access token")
+        GOOGLE_DRIVE_TOKEN = token
+        GOOGLE_DRIVE_TOKEN_EXPIRES = time.time() + int(token_data.get("expires_in", 3600))
+        return GOOGLE_DRIVE_TOKEN
+
+
+def _google_drive_request(settings, method, url, body=None, content_type=None):
+    headers = {"Authorization": f"Bearer {_google_drive_access_token(settings)}"}
+    if content_type:
+        headers["Content-Type"] = content_type
+    request = Request(url, data=body, headers=headers, method=method)
+    try:
+        with urlopen(request, timeout=30) as response:
+            return response.read()
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        detail = _google_response_error(exc.read()) if isinstance(exc, HTTPError) else str(exc)
+        raise GoogleDrivePersistenceError(f"Google Drive request failed: {detail}") from exc
+
+
+def _google_drive_file(settings, filename):
+    query = f"'{settings['GOOGLE_DRIVE_FOLDER_ID']}' in parents and name = '{filename}' and trashed = false"
+    url = "https://www.googleapis.com/drive/v3/files?" + urlencode({
+        "q": query,
+        "spaces": "drive",
+        "pageSize": "100",
+        "fields": "files(id,name)",
+    })
+    try:
+        response = json.loads(_google_drive_request(settings, "GET", url).decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GoogleDrivePersistenceError("Google Drive returned an invalid file-list response") from exc
+    files = response.get("files")
+    if not isinstance(files, list):
+        raise GoogleDrivePersistenceError("Google Drive returned an invalid file list")
+    if len(files) > 1:
+        raise GoogleDrivePersistenceError(
+            f"Google Drive folder contains multiple files named {filename}; keep only one to avoid ambiguous data"
+        )
+    return files[0] if files else None
+
+
+def _google_drive_read_json(settings, filename):
+    drive_file = _google_drive_file(settings, filename)
+    if drive_file is None:
+        return None
+    file_id = drive_file.get("id")
+    if not isinstance(file_id, str) or not file_id:
+        raise GoogleDrivePersistenceError(f"Google Drive returned an invalid ID for {filename}")
+    url = f"https://www.googleapis.com/drive/v3/files/{quote(file_id, safe='')}?alt=media"
+    try:
+        return json.loads(_google_drive_request(settings, "GET", url).decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GoogleDrivePersistenceError(f"Google Drive file {filename} does not contain valid JSON") from exc
+
+
+def _google_drive_write_json(settings, filename, data):
+    encoded = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    drive_file = _google_drive_file(settings, filename)
+    if drive_file is None:
+        metadata = json.dumps({
+            "name": filename,
+            "mimeType": "application/json",
+            "parents": [settings["GOOGLE_DRIVE_FOLDER_ID"]],
+        }).encode("utf-8")
+        create_url = "https://www.googleapis.com/drive/v3/files?" + urlencode({"fields": "id"})
+        try:
+            created = json.loads(_google_drive_request(
+                settings, "POST", create_url, metadata, "application/json; charset=utf-8"
+            ).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise GoogleDrivePersistenceError("Google Drive returned an invalid file-creation response") from exc
+        file_id = created.get("id")
+    else:
+        file_id = drive_file.get("id")
+    if not isinstance(file_id, str) or not file_id:
+        raise GoogleDrivePersistenceError(f"Google Drive did not create a valid ID for {filename}")
+    upload_url = f"https://www.googleapis.com/upload/drive/v3/files/{quote(file_id, safe='')}?uploadType=media"
+    _google_drive_request(settings, "PATCH", upload_url, encoded, "application/json; charset=utf-8")
+
+
+def _write_json_local(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def sync_json_files_with_google_drive():
+    settings = google_drive_settings()
+    if settings is None:
+        return False
+    with GOOGLE_DRIVE_LOCK:
+        remote_files = {
+            filename: _google_drive_read_json(settings, filename)
+            for filename in GOOGLE_DRIVE_FILES
+        }
+        has_remote_state = any(data is not None for data in remote_files.values())
+        for filename, path in GOOGLE_DRIVE_FILES.items():
+            remote_data = remote_files[filename]
+            if remote_data is not None:
+                if filename == DATA_FILE.name:
+                    if not isinstance(remote_data, dict):
+                        raise GoogleDrivePersistenceError("The Google Drive database file must contain a JSON object")
+                    for key, value in default_data().items():
+                        remote_data.setdefault(key, value)
+                    if not valid_data_shape(remote_data):
+                        raise GoogleDrivePersistenceError("The Google Drive database file has an invalid structure")
+                elif not valid_user_store(remote_data):
+                    raise GoogleDrivePersistenceError("The Google Drive users file has an invalid structure")
+                _write_json_local(path, remote_data)
+                continue
+
+            if path.exists():
+                with path.open("r", encoding="utf-8") as source:
+                    local_data = json.load(source)
+            elif has_remote_state:
+                raise GoogleDrivePersistenceError(
+                    f"Google Drive state is incomplete: {filename} is missing; refusing to initialize empty data"
+                )
+            else:
+                local_data = default_data() if filename == DATA_FILE.name else empty_user_store()
+                _write_json_local(path, local_data)
+            _google_drive_write_json(settings, filename, local_data)
+    return True
 
 
 def empty_user_store():
@@ -295,11 +489,21 @@ def read_json(path, fallback):
 
 
 def write_json(path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+    path = Path(path)
+    with GOOGLE_DRIVE_LOCK:
+        _write_json_local(path, data)
+        settings = google_drive_settings()
+        if settings is not None:
+            filename = next(
+                (name for name, managed_path in GOOGLE_DRIVE_FILES.items() if path.resolve() == managed_path.resolve()),
+                None,
+            )
+            if filename is not None:
+                try:
+                    _google_drive_write_json(settings, filename, data)
+                except GoogleDrivePersistenceError:
+                    print(f"Google Drive persistence failed for {filename}; the change was not confirmed as saved.")
+                    raise
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -352,6 +556,13 @@ class Handler(SimpleHTTPRequestHandler):
         return f"{SESSION_COOKIE}={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age}{secure}"
 
     def do_GET(self):
+        try:
+            self._handle_get()
+        except GoogleDrivePersistenceError as exc:
+            print("Google Drive persistence error: %s" % exc)
+            self._send_json({"ok": False, "error": "Google Drive storage failed. Check its credentials, folder access, and connection."}, 503)
+
+    def _handle_get(self):
         path = unquote(self.path.split("?", 1)[0])
         if path == "/api/auth/session":
             identity = session_user(self)
@@ -408,6 +619,13 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        try:
+            self._handle_post()
+        except GoogleDrivePersistenceError as exc:
+            print("Google Drive persistence error: %s" % exc)
+            self._send_json({"ok": False, "error": "Google Drive storage failed. Check its credentials, folder access, and connection."}, 503)
+
+    def _handle_post(self):
         path = unquote(self.path.split("?", 1)[0])
         if path.startswith("/api/") and not self._same_origin():
             self._send_json({"ok": False, "error": "cross-origin request rejected"}, 403)
@@ -674,15 +892,10 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     DATABASE.mkdir(parents=True, exist_ok=True)
+    if sync_json_files_with_google_drive():
+        print("JSON database and user accounts are synchronized with Google Drive.")
     if not DATA_FILE.exists():
-        write_json(DATA_FILE, {
-            "courses": [],
-            "workspace": [],
-            "dailyPayments": [],
-            "expenses": [],
-            "owners": [],
-            "closings": [],
-        })
+        write_json(DATA_FILE, default_data())
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     url = f"http://127.0.0.1:{PORT}/"
     print("Asia Center is running")
