@@ -1,6 +1,7 @@
-let db = { courses: [], allocations: [], rooms: [], workspace: [], dailyPayments: [], expenses: [], owners: [], closings: [] };
+let db = { courses: [], allocations: [], rooms: [], roomColors: {}, workspace: [], dailyPayments: [], expenses: [], owners: [], closings: [] };
 let currentPermissions = new Set();
 let authSetupRequired = false;
+let selectedAllocationRooms = null;
 
 // ================= ACCESS CONTROL =================
 const PERMISSION_LABELS = {
@@ -119,6 +120,7 @@ async function initDB() {
   if (!db.courses) db.courses = [];
   if (!db.allocations) db.allocations = [];
   if (!db.rooms) db.rooms = [];
+  if (!db.roomColors || typeof db.roomColors !== 'object' || Array.isArray(db.roomColors)) db.roomColors = {};
   if (!db.workspace) db.workspace = [];
   if (!db.dailyPayments) db.dailyPayments = [];
   if (!db.expenses) db.expenses = [];
@@ -143,6 +145,7 @@ async function initDB() {
         if ((localDb.owners || []).length < db.owners.length) localDb.owners = db.owners;
         if (!localDb.dailyPayments) localDb.dailyPayments = db.dailyPayments;
         if (!localDb.owners) localDb.owners = db.owners;
+        localDb.roomColors = { ...(localDb.roomColors || {}), ...(db.roomColors || {}) };
         db = localDb;
         saveDB();
       }
@@ -152,6 +155,8 @@ async function initDB() {
   }
   if (!db.allocations) db.allocations = [];
   if (!db.rooms) db.rooms = [];
+  if (!db.roomColors || typeof db.roomColors !== 'object' || Array.isArray(db.roomColors)) db.roomColors = {};
+  if (ensureAllocationRoomColors() && currentPermissions.has('courses.manage')) saveDB();
 
   return true;
 }
@@ -404,8 +409,96 @@ function allocationId() {
 function renderAllocationPage() {
   if (!Array.isArray(db.allocations)) db.allocations = [];
   if (!Array.isArray(db.rooms)) db.rooms = [];
+  if (!db.roomColors || typeof db.roomColors !== 'object' || Array.isArray(db.roomColors)) db.roomColors = {};
+  renderAllocationRoomFilters();
   renderAllocationMatrix();
   renderAllocationRooms();
+}
+
+const ROOM_COLOR_PALETTE = [
+  '#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#0891b2',
+  '#be123c', '#4d7c0f', '#6d28d9', '#0f766e', '#b45309', '#475569',
+  '#c026d3', '#0284c7', '#65a30d', '#e11d48', '#7c3aed', '#0d9488',
+  '#ca8a04', '#334155', '#4f46e5', '#059669', '#c2410c', '#a21caf'
+];
+
+function randomAllocationIndex(max) {
+  if (window.crypto?.getRandomValues) {
+    const value = new Uint32Array(1);
+    window.crypto.getRandomValues(value);
+    return value[0] % max;
+  }
+  return Math.floor(Math.random() * max);
+}
+
+function generateRoomColor(usedColors) {
+  const available = ROOM_COLOR_PALETTE.filter(color => !usedColors.has(color));
+  if (available.length) return available[randomAllocationIndex(available.length)];
+  let color;
+  do {
+    const channel = () => 48 + randomAllocationIndex(145);
+    color = `#${[channel(), channel(), channel()].map(value => value.toString(16).padStart(2, '0')).join('')}`;
+  } while (usedColors.has(color));
+  return color;
+}
+
+function ensureAllocationRoomColors() {
+  const existing = db.roomColors;
+  const colors = Object.create(null);
+  const usedColors = new Set();
+  let changed = false;
+  db.rooms.forEach(room => {
+    const savedColor = existing[room];
+    const color = typeof savedColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(savedColor) &&
+      !usedColors.has(savedColor.toLowerCase())
+      ? savedColor
+      : generateRoomColor(usedColors);
+    colors[room] = color;
+    usedColors.add(color.toLowerCase());
+    if (savedColor !== color) changed = true;
+  });
+  if (Object.keys(existing).some(room => !db.rooms.includes(room))) changed = true;
+  db.roomColors = colors;
+  return changed;
+}
+
+function roomColor(room) {
+  const color = db.roomColors?.[room];
+  return typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#64748b';
+}
+
+function renderAllocationRoomFilters() {
+  const container = document.getElementById('allocation-room-filters');
+  if (!container) return;
+  if (!db.rooms.length) {
+    container.innerHTML = '<span style="color:var(--text-muted);">أضف قاعات لتصفية الجدول حسب القاعة.</span>';
+    return;
+  }
+  const allRoomsSelected = selectedAllocationRooms === null;
+  container.innerHTML = `
+    <span style="font-size:.86rem;font-weight:700;">عرض القاعات:</span>
+    <button type="button" class="btn btn-outline" style="padding:.3rem .65rem;font-size:.8rem;" onclick="showAllAllocationRooms()">عرض كل القاعات</button>
+    ${db.rooms.map((room, index) => `
+      <label class="allocation-filter-option" style="--room-color:${roomColor(room)}">
+        <input type="checkbox" ${allRoomsSelected || selectedAllocationRooms.has(room) ? 'checked' : ''}
+          onchange="setAllocationRoomFilter(${index}, this.checked)">
+        ${escapeHtml(room)}
+      </label>`).join('')}`;
+}
+
+function showAllAllocationRooms() {
+  selectedAllocationRooms = null;
+  renderAllocationPage();
+}
+
+function setAllocationRoomFilter(index, checked) {
+  const room = db.rooms[index];
+  if (!room) return;
+  if (selectedAllocationRooms === null) selectedAllocationRooms = new Set(db.rooms);
+  if (checked) selectedAllocationRooms.add(room);
+  else selectedAllocationRooms.delete(room);
+  if (selectedAllocationRooms.size === db.rooms.length) selectedAllocationRooms = null;
+  renderAllocationPage();
 }
 
 function renderAllocationMatrix() {
@@ -414,6 +507,7 @@ function renderAllocationMatrix() {
   const slotsByDay = ALLOCATION_DAYS.map((_, day) => db.allocations
     .map((slot, index) => ({ slot, index }))
     .filter(item => Number(item.slot.day) === day)
+    .filter(item => selectedAllocationRooms === null || selectedAllocationRooms.has(item.slot.room))
     .sort((a, b) => a.slot.startTime.localeCompare(b.slot.startTime)));
 
   matrix.innerHTML = ALLOCATION_DAYS.map((dayName, day) => {
@@ -431,11 +525,12 @@ function renderAllocationMatrix() {
           <button class="btn btn-outline" style="padding:.2rem .45rem;font-size:.75rem;" onclick="editAllocation(${index})" title="تعديل التخصيص"><i class="fa-solid fa-pen"></i></button>
           <button class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;" onclick="deleteAllocation(${index})" title="حذف التخصيص"><i class="fa-solid fa-trash"></i></button>
         </div>` : '';
+      const colorStyle = `--room-color:${roomColor(slot.room)}`;
       return `
-        <article class="allocation-slot">
+        <article class="allocation-slot" style="${colorStyle}">
           <strong>${escapeHtml(slot.courseName)}</strong>
           <div style="font-size:.86rem;margin-top:.25rem;"><i class="fa-regular fa-clock"></i> ${escapeHtml(slot.startTime)} - ${escapeHtml(slot.endTime)}</div>
-          <div style="font-size:.86rem;"><i class="fa-solid fa-door-open"></i> ${escapeHtml(slot.room)}</div>
+          <div class="allocation-slot-room" style="${colorStyle};font-size:.86rem;"><i class="fa-solid fa-door-open"></i> ${escapeHtml(slot.room)}</div>
           ${period}
           <div style="font-size:.8rem;margin-top:.35rem;">${students.length} طالب</div>
           ${roster}${actions}
@@ -450,8 +545,8 @@ function renderAllocationRooms() {
   if (!container) return;
   container.innerHTML = db.rooms.length
     ? db.rooms.map((room, index) => `
-      <span class="allocation-room-chip">
-        ${escapeHtml(room)}
+      <span class="allocation-room-chip" style="--room-color:${roomColor(room)}">
+        <span class="allocation-room-name">${escapeHtml(room)}</span>
         ${currentPermissions.has('courses.manage') ? `<button type="button" class="btn btn-danger" style="padding:.15rem .4rem;font-size:.72rem;" onclick="deleteAllocationRoom(${index})" aria-label="حذف ${escapeHtml(room)}"><i class="fa-solid fa-xmark"></i></button>` : ''}
       </span>`).join('')
     : '<span style="color:var(--text-muted);">لم تتم إضافة قاعات بعد.</span>';
@@ -469,9 +564,10 @@ function addAllocationRoom(event) {
     }
     db.rooms.push(room);
     db.rooms.sort((a, b) => a.localeCompare(b, 'ar'));
+    db.roomColors[room] = generateRoomColor(new Set(Object.values(db.roomColors).map(color => color.toLowerCase())));
     saveDB();
     input.value = '';
-    renderAllocationRooms();
+    renderAllocationPage();
   });
 }
 
@@ -485,8 +581,10 @@ function deleteAllocationRoom(index) {
   requirePin('حذف قاعة يتطلب صلاحية إدارة المواد والتخصيصات', () => {
     if (!confirm(`حذف القاعة "${room}"؟`)) return;
     db.rooms.splice(index, 1);
+    delete db.roomColors[room];
+    if (selectedAllocationRooms !== null) selectedAllocationRooms.delete(room);
     saveDB();
-    renderAllocationRooms();
+    renderAllocationPage();
   });
 }
 
@@ -1890,6 +1988,7 @@ function importDataBackup(event) {
           if (!importedData.closings) importedData.closings = [];
           if (!importedData.allocations) importedData.allocations = [];
           if (!importedData.rooms) importedData.rooms = [];
+          if (!importedData.roomColors) importedData.roomColors = {};
           if (!confirm('سيتم استبدال جميع بيانات النظام. النسخة الكاملة ستستبدل أيضًا حسابات المستخدمين والأدوار، وستحتاج إلى تسجيل الدخول مجددًا ببيانات الحسابات الموجودة في النسخة. هل تريد المتابعة؟')) return;
           const response = await fetch('/api/data/restore', {
             method: 'POST',

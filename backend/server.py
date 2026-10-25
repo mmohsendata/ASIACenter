@@ -109,6 +109,7 @@ def data_change_permissions(old, new):
     for field, permission in (
         ("allocations", "courses.manage"),
         ("rooms", "courses.manage"),
+        ("roomColors", "courses.manage"),
         ("dailyPayments", "payments.manage"),
         ("workspace", "workspace.manage"),
         ("expenses", "expenses.manage"),
@@ -184,7 +185,10 @@ def data_change_permissions(old, new):
                     elif old_session.get("paid50") != new_session.get("paid50"):
                         required.add("payments.manage")
 
-    known_fields = {"courses", "allocations", "rooms", "dailyPayments", "workspace", "expenses", "owners", "closings"}
+    known_fields = {
+        "courses", "allocations", "rooms", "roomColors", "dailyPayments",
+        "workspace", "expenses", "owners", "closings",
+    }
     if (set(old) - known_fields != set(new) - known_fields or
             any(old.get(key) != new.get(key) for key in set(old) - known_fields)):
         required.add("users.manage")
@@ -209,6 +213,12 @@ def valid_data_shape(data):
     rooms = data["rooms"]
     if (any(not isinstance(room, str) or not room.strip() or len(room) > 80 for room in rooms) or
             len({room.casefold() for room in rooms}) != len(rooms)):
+        return False
+    room_colors = data.get("roomColors", {})
+    if (not isinstance(room_colors, dict) or
+            any(room not in rooms or not isinstance(color, str) or
+                not re.fullmatch(r"#[0-9a-fA-F]{6}", color) for room, color in room_colors.items()) or
+            len({color.lower() for color in room_colors.values()}) != len(room_colors)):
         return False
     course_names = {course.get("name") for course in data["courses"] if isinstance(course.get("name"), str)}
     allocation_ids = set()
@@ -259,6 +269,7 @@ def default_data():
         "courses": [],
         "allocations": [],
         "rooms": [],
+        "roomColors": {},
         "workspace": [],
         "dailyPayments": [],
         "expenses": [],
@@ -481,6 +492,7 @@ class Handler(SimpleHTTPRequestHandler):
             data.setdefault("courses", [])
             data.setdefault("allocations", [])
             data.setdefault("rooms", [])
+            data.setdefault("roomColors", {})
             data.setdefault("workspace", [])
             data.setdefault("dailyPayments", [])
             data.setdefault("expenses", [])
@@ -760,6 +772,7 @@ class Handler(SimpleHTTPRequestHandler):
             data.setdefault("courses", [])
             data.setdefault("allocations", [])
             data.setdefault("rooms", [])
+            data.setdefault("roomColors", {})
             data.setdefault("workspace", [])
             data.setdefault("dailyPayments", [])
             data.setdefault("expenses", [])
