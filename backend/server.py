@@ -37,24 +37,32 @@ PASSWORD_ITERATIONS = 310_000
 PERMISSIONS = {
     "data.view",
     "courses.manage",
+    "courses.read", "courses.edit", "courses.delete",
     "allocations.manage",
+    "allocations.read", "allocations.edit", "allocations.delete",
     "students.manage",
+    "students.read", "students.edit", "students.delete",
     "attendance.manage",
+    "attendance.read", "attendance.edit", "attendance.delete",
     "payments.manage",
+    "payments.read", "payments.edit", "payments.delete",
     "workspace.manage",
+    "workspace.read", "workspace.edit", "workspace.delete",
     "expenses.manage",
+    "expenses.read", "expenses.edit", "expenses.delete",
     "closing.manage",
+    "closing.read", "closing.edit", "closing.delete",
     "backups.manage",
+    "backups.read", "backups.edit", "backups.delete",
     "users.manage",
+    "users.read", "users.edit", "users.delete",
 }
-DATA_MANAGEMENT_PERMISSIONS = {
-    "courses.manage",
-    "students.manage",
-    "attendance.manage",
-    "payments.manage",
-    "workspace.manage",
-    "expenses.manage",
-    "closing.manage",
+ROLE_MODULES = (
+    "courses", "allocations", "students", "attendance", "payments",
+    "workspace", "expenses", "closing", "backups", "users",
+)
+DATA_VIEW_REQUIRED_MODULES = {
+    "courses", "students", "attendance", "payments", "workspace", "expenses", "closing",
 }
 ALL_PERMISSIONS = sorted(PERMISSIONS)
 
@@ -92,9 +100,22 @@ def verify_password(password, stored):
 
 def role_permissions(store, user):
     role = next((item for item in store["roles"] if item["id"] == user["roleId"]), None)
-    permissions = set(role["permissions"]) if role else set()
-    if "courses.manage" in permissions:
-        permissions.add("allocations.manage")
+    granted_permissions = set(role["permissions"]) if role else set()
+    permissions = granted_permissions.copy()
+    for module in ROLE_MODULES:
+        legacy = f"{module}.manage"
+        if legacy in permissions:
+            permissions.update((f"{module}.read", f"{module}.edit", f"{module}.delete"))
+        if f"{module}.read" in permissions:
+            permissions.add(f"{module}.view")
+        if f"{module}.edit" in permissions:
+            permissions.update((f"{module}.view", legacy))
+        if f"{module}.delete" in permissions:
+            permissions.update((f"{module}.view", f"{module}.edit", legacy))
+    if "courses.manage" in granted_permissions:
+        permissions.update((
+            "allocations.manage", "allocations.view", "allocations.edit", "allocations.delete",
+        ))
     return permissions
 
 
@@ -206,6 +227,96 @@ def data_change_permissions(old, new):
     if (set(old) - known_fields != set(new) - known_fields or
             any(old.get(key) != new.get(key) for key in set(old) - known_fields)):
         required.add("users.manage")
+    return required
+
+
+def data_delete_permissions(old, new):
+    required = set()
+    for field, permission in (
+        ("allocations", "allocations.delete"),
+        ("rooms", "allocations.delete"),
+        ("dailyPayments", "payments.delete"),
+        ("workspace", "workspace.delete"),
+        ("expenses", "expenses.delete"),
+        ("owners", "closing.delete"),
+        ("closings", "closing.delete"),
+    ):
+        if len(old.get(field, [])) > len(new.get(field, [])):
+            required.add(permission)
+
+    old_courses = old.get("courses", [])
+    new_courses = new.get("courses", [])
+    if len(old_courses) > len(new_courses):
+        required.add("courses.delete")
+    new_courses_by_name = {
+        course.get("name"): course for course in new_courses if isinstance(course, dict)
+    }
+    for old_course in old_courses:
+        if not isinstance(old_course, dict):
+            continue
+        new_course = new_courses_by_name.get(old_course.get("name"))
+        if new_course is None:
+            students = old_course.get("students", [])
+            if students:
+                required.add("students.delete")
+            for student in students:
+                if student.get("sessions"):
+                    required.add("attendance.delete")
+                if student.get("paid") or any(
+                    session.get("paid50") for session in student.get("sessions", [])
+                ):
+                    required.add("payments.delete")
+            continue
+        old_students = old_course.get("students", [])
+        new_students = new_course.get("students", [])
+        if len(old_students) > len(new_students):
+            required.add("students.delete")
+        new_students_by_key = {
+            (student.get("name"), student.get("phone", "")): student
+            for student in new_students if isinstance(student, dict)
+        }
+        for old_student in old_students:
+            if not isinstance(old_student, dict):
+                continue
+            new_student = new_students_by_key.get(
+                (old_student.get("name"), old_student.get("phone", ""))
+            )
+            if new_student is None:
+                required.add("students.delete")
+                if old_student.get("sessions"):
+                    required.add("attendance.delete")
+                if old_student.get("paid") or any(
+                    session.get("paid50") for session in old_student.get("sessions", [])
+                ):
+                    required.add("payments.delete")
+                continue
+            old_paid = old_student.get("paid", 0)
+            new_paid = new_student.get("paid", 0)
+            if (isinstance(old_paid, (int, float)) and not isinstance(old_paid, bool) and
+                    isinstance(new_paid, (int, float)) and not isinstance(new_paid, bool) and
+                    new_paid < old_paid):
+                required.add("payments.delete")
+            old_sessions = old_student.get("sessions", [])
+            new_sessions = new_student.get("sessions", [])
+            new_sessions_by_date = {
+                session.get("date"): session for session in new_sessions
+                if isinstance(session, dict)
+            }
+            if any(
+                session.get("date") not in new_sessions_by_date
+                for session in old_sessions if isinstance(session, dict)
+            ):
+                required.add("attendance.delete")
+                if any(session.get("paid50") for session in old_sessions if isinstance(session, dict)):
+                    required.add("payments.delete")
+            for old_session in old_sessions:
+                if not isinstance(old_session, dict):
+                    continue
+                new_session = new_sessions_by_date.get(old_session.get("date"))
+                if old_session.get("paid50") and (
+                    not new_session or not new_session.get("paid50")
+                ):
+                    required.add("payments.delete")
     return required
 
 
@@ -367,8 +478,7 @@ def valid_user_store(store):
             return False
         if not salt or len(digest) != hashlib.sha256().digest_size or not 100_000 <= iterations <= 1_000_000:
             return False
-        role = next(item for item in store["roles"] if item["id"] == user["roleId"])
-        if user["active"] and "users.manage" in role["permissions"]:
+        if user["active"] and "users.manage" in role_permissions(store, user):
             active_user_with_admin_access = True
 
     return not store["users"] or active_user_with_admin_access
@@ -556,7 +666,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(data)
             return
         if path == "/api/allocation-data":
-            identity = self._require_permission("allocations.manage")
+            identity = self._require_permission("allocations.view")
             if identity is None:
                 return
             with DATA_LOCK:
@@ -588,12 +698,12 @@ class Handler(SimpleHTTPRequestHandler):
                 })
             return
         if path == "/api/data/export":
-            if self._require_permission("backups.manage") is None:
+            if self._require_permission("backups.view") is None:
                 return
             self._send_json(build_full_backup())
             return
         if path in ("/api/admin/users", "/api/admin/roles"):
-            identity = self._require_permission("users.manage")
+            identity = self._require_permission("users.view")
             if identity is None:
                 return
             store = identity[0]
@@ -679,7 +789,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json({"ok": True})
             return
         if path in ("/api/admin/users", "/api/admin/roles"):
-            identity = self._require_permission("users.manage")
+            identity = self._require_permission("users.edit")
             if identity is None:
                 return
             try:
@@ -694,6 +804,9 @@ class Handler(SimpleHTTPRequestHandler):
             if path.endswith("/roles"):
                 action = data.get("action")
                 if action == "delete":
+                    if "users.delete" not in identity[3]:
+                        self._send_json({"ok": False, "error": "permission denied"}, 403)
+                        return
                     role_id = str(data.get("id") or "")
                     if not any(role["id"] == role_id for role in store["roles"]):
                         self._send_json({"ok": False, "error": "Role not found."}, 404)
@@ -710,7 +823,12 @@ class Handler(SimpleHTTPRequestHandler):
                             any(not isinstance(item, str) or item not in PERMISSIONS for item in permissions)):
                         self._send_json({"ok": False, "error": "Invalid role name or permissions."}, 400)
                         return
-                    if DATA_MANAGEMENT_PERMISSIONS.intersection(permissions) and "data.view" not in permissions:
+                    requires_data_view = any(
+                        any(f"{module}.{level}" in permissions for level in ("read", "edit", "delete"))
+                        or f"{module}.manage" in permissions
+                        for module in DATA_VIEW_REQUIRED_MODULES
+                    )
+                    if requires_data_view and "data.view" not in permissions:
                         self._send_json({
                             "ok": False,
                             "error": "Data-management permissions require data.view.",
@@ -738,6 +856,9 @@ class Handler(SimpleHTTPRequestHandler):
             action = data.get("action")
             username = str(data.get("username") or "").strip()
             if action == "delete":
+                if "users.delete" not in identity[3]:
+                    self._send_json({"ok": False, "error": "permission denied"}, 403)
+                    return
                 if username not in store["users"]:
                     self._send_json({"ok": False, "error": "User not found."}, 404)
                     return
@@ -775,7 +896,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json({"ok": True})
             return
         if path == "/api/send-backup":
-            if self._require_permission("backups.manage") is None:
+            if self._require_permission("backups.edit") is None:
                 return
             try:
                 data = self._read_body()
@@ -814,7 +935,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json({"ok": True})
             return
         if path == "/api/data/restore":
-            if self._require_permission("backups.manage") is None:
+            if self._require_permission("backups.delete") is None:
                 return
             try:
                 data = self._read_body()
@@ -880,6 +1001,7 @@ class Handler(SimpleHTTPRequestHandler):
             data.setdefault("closings", [])
             old_data = read_json(DATA_FILE, {})
             required = data_change_permissions(old_data, data)
+            required.update(data_delete_permissions(old_data, data))
             missing = required - identity[3]
             if missing:
                 self._send_json({"ok": False, "error": "permission denied", "permissions": sorted(missing)}, 403)
@@ -888,7 +1010,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json({"ok": True})
             return
         if path == "/api/allocation-data":
-            if self._require_permission("allocations.manage") is None:
+            identity = self._require_permission("allocations.edit")
+            if identity is None:
                 return
             try:
                 allocation_data = self._read_body()
@@ -910,9 +1033,29 @@ class Handler(SimpleHTTPRequestHandler):
                 data.setdefault("expenses", [])
                 data.setdefault("owners", [])
                 data.setdefault("closings", [])
+                old_allocations = data["allocations"]
+                old_rooms = data["rooms"]
                 data.update(allocation_data)
                 if not valid_data_shape(data):
                     self._send_json({"ok": False, "error": "invalid allocation data"}, 400)
+                    return
+                new_allocation_ids = {
+                    slot.get("id") for slot in allocation_data["allocations"]
+                    if isinstance(slot, dict) and slot.get("id") is not None
+                }
+                removed_allocation = any(
+                    (slot.get("id") not in new_allocation_ids)
+                    if isinstance(slot, dict) and slot.get("id") is not None
+                    else slot not in allocation_data["allocations"]
+                    for slot in old_allocations
+                )
+                removed_room = any(room not in allocation_data["rooms"] for room in old_rooms)
+                if (removed_allocation or removed_room) and "allocations.delete" not in identity[3]:
+                    self._send_json({
+                        "ok": False,
+                        "error": "permission denied",
+                        "permissions": ["allocations.delete"],
+                    }, 403)
                     return
                 write_json(DATA_FILE, data)
             self._send_json({"ok": True})

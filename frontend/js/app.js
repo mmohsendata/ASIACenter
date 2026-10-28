@@ -7,31 +7,72 @@ let selectedAllocationRooms = null;
 const PERMISSION_LABELS = {
   "data.view": "عرض بيانات النظام",
   "courses.manage": "إدارة المواد والكورسات",
+  "courses.view": "عرض المواد والكورسات",
+  "courses.edit": "تعديل المواد والكورسات",
+  "courses.delete": "حذف المواد والكورسات",
   "allocations.manage": "إدارة توزيع القاعات والجداول",
+  "allocations.view": "عرض توزيع القاعات والجداول",
+  "allocations.edit": "تعديل توزيع القاعات والجداول",
+  "allocations.delete": "حذف تخصيصات وقاعات",
   "students.manage": "إدارة بيانات الطلاب",
+  "students.view": "عرض بيانات الطلاب",
+  "students.edit": "تعديل بيانات الطلاب",
+  "students.delete": "حذف بيانات الطلاب",
   "attendance.manage": "إدارة الحضور",
+  "attendance.view": "عرض سجلات الحضور",
+  "attendance.edit": "تعديل سجلات الحضور",
+  "attendance.delete": "حذف سجلات الحضور",
   "payments.manage": "إدارة المدفوعات",
+  "payments.view": "عرض المدفوعات",
+  "payments.edit": "تعديل المدفوعات",
+  "payments.delete": "حذف المدفوعات",
   "workspace.manage": "إدارة الورك سبيس",
+  "workspace.view": "عرض الورك سبيس",
+  "workspace.edit": "تعديل الورك سبيس",
+  "workspace.delete": "حذف سجلات الورك سبيس",
   "expenses.manage": "إدارة المصروفات",
+  "expenses.view": "عرض المصروفات",
+  "expenses.edit": "تعديل المصروفات",
+  "expenses.delete": "حذف المصروفات",
   "closing.manage": "إدارة الأرباح والإقفالات",
+  "closing.view": "عرض الأرباح والإقفالات",
+  "closing.edit": "تعديل الأرباح والإقفالات",
+  "closing.delete": "حذف الملاك والإقفالات",
   "backups.manage": "إدارة النسخ الاحتياطية",
-  "users.manage": "إدارة المستخدمين والأدوار"
+  "backups.view": "عرض النسخ الاحتياطية",
+  "backups.edit": "إرسال النسخ الاحتياطية",
+  "backups.delete": "استبدال بيانات النظام من نسخة احتياطية",
+  "users.manage": "إدارة المستخدمين والأدوار",
+  "users.view": "عرض المستخدمين والأدوار",
+  "users.edit": "إضافة وتعديل المستخدمين والأدوار",
+  "users.delete": "حذف المستخدمين والأدوار"
 };
 
+const ROLE_MODULES = [
+  { key: "courses", permission: "courses.manage", label: "المواد والكورسات" },
+  { key: "allocations", permission: "allocations.manage", label: "توزيع القاعات والجداول" },
+  { key: "students", permission: "students.manage", label: "الطلاب" },
+  { key: "attendance", permission: "attendance.manage", label: "الحضور" },
+  { key: "payments", permission: "payments.manage", label: "المدفوعات" },
+  { key: "workspace", permission: "workspace.manage", label: "الورك سبيس" },
+  { key: "expenses", permission: "expenses.manage", label: "المصروفات" },
+  { key: "closing", permission: "closing.manage", label: "الأرباح والإقفالات" },
+  { key: "backups", permission: "backups.manage", label: "النسخ الاحتياطية" },
+  { key: "users", permission: "users.manage", label: "المستخدمون والأدوار" }
+];
 const TAB_PERMISSIONS = {
   daily: "data.view",
-  courses: ["courses.manage", "students.manage", "attendance.manage", "payments.manage"],
-  allocation: ["courses.manage", "allocations.manage"],
-  students: "students.manage",
-  professors: "courses.manage",
-  workspace: "workspace.manage",
-  expenses: "expenses.manage",
-  closing: "closing.manage",
-  admin: "users.manage"
+  courses: ["courses.view", "students.view", "attendance.view", "payments.view"],
+  allocation: "allocations.view",
+  students: "students.view",
+  professors: "courses.view",
+  workspace: "workspace.view",
+  expenses: "expenses.view",
+  closing: "closing.view",
+  admin: "users.view"
 };
-const DATA_MANAGEMENT_PERMISSIONS = new Set([
-  "courses.manage", "students.manage", "attendance.manage", "payments.manage",
-  "workspace.manage", "expenses.manage", "closing.manage"
+const DATA_VIEW_REQUIRED_MODULES = new Set([
+  "courses", "students", "attendance", "payments", "workspace", "expenses", "closing"
 ]);
 
 function requirePermission(permission, callback) {
@@ -41,6 +82,10 @@ function requirePermission(permission, callback) {
 
 function requireAllocationPermission(callback) {
   requirePermission('allocations.manage', callback);
+}
+
+function requireDeletePermission(permission, callback) {
+  requirePermission(permission.replace(/\.manage$/, '.delete'), callback);
 }
 
 function hasPermission(permission) {
@@ -85,7 +130,7 @@ function saveNewPassword() {
 }
 
 function openBackupModal() {
-  if (!currentPermissions.has('backups.manage')) {
+  if (!currentPermissions.has('backups.view')) {
     alert('ليس لديك صلاحية إدارة النسخ الاحتياطية.');
     return;
   }
@@ -127,11 +172,10 @@ async function initDB() {
   }
   document.getElementById('modal-auth').classList.remove('open');
   currentPermissions = new Set(session.permissions || []);
-  if (currentPermissions.has('courses.manage')) currentPermissions.add('allocations.manage');
   document.getElementById('current-user-label').textContent = `${session.username} (${session.role})`;
   applyPermissionsToUI();
   if (!currentPermissions.has('data.view')) {
-    if (currentPermissions.has('allocations.manage')) {
+    if (currentPermissions.has('allocations.view')) {
       const allocationResponse = await fetch('/api/allocation-data');
       if (!allocationResponse.ok) throw new Error('تعذر تحميل بيانات توزيع القاعات والجداول.');
       db = await allocationResponse.json();
@@ -139,9 +183,9 @@ async function initDB() {
       if (!Array.isArray(db.allocations)) db.allocations = [];
       if (!Array.isArray(db.rooms)) db.rooms = [];
       if (!db.roomColors || typeof db.roomColors !== 'object' || Array.isArray(db.roomColors)) db.roomColors = {};
-      if (ensureAllocationRoomColors()) await saveDB();
+      if (ensureAllocationRoomColors() && currentPermissions.has('allocations.edit')) await saveDB();
       switchTab('allocation');
-    } else if (currentPermissions.has('users.manage')) switchTab('admin');
+    } else if (currentPermissions.has('users.view')) switchTab('admin');
     else switchTab('access-denied');
     return true;
   }
@@ -252,8 +296,10 @@ function applyPermissionsToUI() {
     const pagePermissions = element.dataset.pagePermission?.split(',') || [];
     const hasPagePermission = !pagePermissions.length ||
       ((currentPermissions.has('data.view') ||
-        (pagePermissions.includes('allocations.manage') &&
-          currentPermissions.has('allocations.manage'))) &&
+        ((pagePermissions.includes('allocations.view') &&
+          currentPermissions.has('allocations.view')) ||
+         (pagePermissions.includes('users.view') &&
+          currentPermissions.has('users.view')))) &&
         pagePermissions.some(permission => currentPermissions.has(permission)));
     element.hidden = !hasElementPermission || !hasPagePermission;
     element.style.display = element.hidden ? 'none' : '';
@@ -278,42 +324,53 @@ async function loadAdminPage() {
     <tr>
       <td>${escapeHtml(user.username)}</td><td>${escapeHtml(roleNames.get(user.roleId) || 'غير معروف')}</td>
       <td>${user.active ? 'نشط' : 'موقوف'}</td>
-      <td><button class="btn btn-outline" onclick="editAdminUser('${escapeHtml(user.username)}','${escapeHtml(user.roleId)}',${user.active})">تعديل</button>
-      <button class="btn btn-danger" onclick="deleteAdminUser('${escapeHtml(user.username)}')">حذف</button></td>
+      <td>${currentPermissions.has('users.edit') ? `<button class="btn btn-outline" onclick="editAdminUser('${escapeHtml(user.username)}','${escapeHtml(user.roleId)}',${user.active})">تعديل</button>` : ''}
+      ${currentPermissions.has('users.delete') ? `<button class="btn btn-danger" onclick="deleteAdminUser('${escapeHtml(user.username)}')">حذف</button>` : ''}</td>
     </tr>`).join('');
 
-  const labels = {
-    "data.view": "عرض بيانات النظام", "courses.manage": "إدارة الكورسات",
-    "allocations.manage": "إدارة توزيع القاعات والجداول", "students.manage": "إدارة الطلاب",
-    "attendance.manage": "إدارة الحضور", "payments.manage": "إدارة المدفوعات", "workspace.manage": "إدارة الورك سبيس",
-    "expenses.manage": "إدارة المصروفات", "closing.manage": "إدارة الأرباح والإقفالات",
-    "backups.manage": "النسخ الاحتياطية", "users.manage": "المستخدمون والأدوار"
-  };
-  document.getElementById('admin-permission-options').innerHTML = rolesData.permissions.map(permission => `
+  document.getElementById('admin-permission-options').innerHTML = `
     <label style="display:flex;gap:.5rem;align-items:center;">
-      <input type="checkbox" value="${escapeHtml(permission)}" onchange="handleRolePermissionChange(this)"> ${escapeHtml(labels[permission] || permission)}
-    </label>`).join('');
+      <input type="checkbox" id="role-data-view"> عرض البيانات اليومية
+    </label>
+    ${ROLE_MODULES.map(module => `
+      <label style="display:flex;gap:.5rem;align-items:center;justify-content:space-between;">
+        <span>${escapeHtml(module.label)}</span>
+        <select data-role-module="${module.key}" aria-label="مستوى صلاحية ${escapeHtml(module.label)}">
+          <option value="none">بدون صلاحية</option>
+          <option value="read">قراءة</option>
+          <option value="edit">قراءة وتعديل</option>
+          <option value="delete">قراءة وتعديل وحذف</option>
+        </select>
+      </label>`).join('')}`;
   document.getElementById('admin-roles-list').innerHTML = rolesData.roles.map(role => `
     <div style="display:flex;gap:.7rem;align-items:center;margin:.5rem 0;">
       <strong>${escapeHtml(role.name)}</strong><span>${role.permissions.length} صلاحية</span>
-      <button class="btn btn-outline" onclick="editAdminRole('${escapeHtml(role.id)}')">تعديل</button>
-      <button class="btn btn-danger" onclick="deleteAdminRole('${escapeHtml(role.id)}')">حذف</button>
+      ${currentPermissions.has('users.edit') ? `<button class="btn btn-outline" onclick="editAdminRole('${escapeHtml(role.id)}')">تعديل</button>` : ''}
+      ${currentPermissions.has('users.delete') ? `<button class="btn btn-danger" onclick="deleteAdminRole('${escapeHtml(role.id)}')">حذف</button>` : ''}
     </div>`).join('');
+  applyPermissionsToUI();
 }
 
-function handleRolePermissionChange(input) {
-  const dataViewInput = document.querySelector('#admin-permission-options input[value="data.view"]');
-  if (!dataViewInput) return;
-  if (input.value === 'data.view' && !input.checked) {
-    const hasDataManagement = [...document.querySelectorAll('#admin-permission-options input:checked')]
-      .some(permission => DATA_MANAGEMENT_PERMISSIONS.has(permission.value));
-    if (hasDataManagement) {
-      input.checked = true;
-      alert('يجب الإبقاء على صلاحية عرض بيانات النظام مع صلاحيات إدارة البيانات.');
-    }
-    return;
+function rolePermissionsFromForm() {
+  const permissions = [];
+  let needsDataView = false;
+  for (const module of ROLE_MODULES) {
+    const level = document.querySelector(`[data-role-module="${module.key}"]`).value;
+    if (level === 'none') continue;
+    permissions.push(`${module.key}.${level}`);
+    if (DATA_VIEW_REQUIRED_MODULES.has(module.key)) needsDataView = true;
   }
-  if (input.checked && DATA_MANAGEMENT_PERMISSIONS.has(input.value)) dataViewInput.checked = true;
+  if (document.getElementById('role-data-view').checked || needsDataView) permissions.push('data.view');
+  return [...new Set(permissions)];
+}
+
+function roleModuleLevel(permissions, moduleKey) {
+  if (moduleKey === 'allocations' && permissions.includes('courses.manage') &&
+      !permissions.some(permission => permission.startsWith('allocations.'))) return 'delete';
+  if (permissions.includes(`${moduleKey}.delete`) || permissions.includes(`${moduleKey}.manage`)) return 'delete';
+  if (permissions.includes(`${moduleKey}.edit`)) return 'edit';
+  if (permissions.includes(`${moduleKey}.read`)) return 'read';
+  return 'none';
 }
 
 function resetAdminUserForm() {
@@ -324,6 +381,7 @@ function resetAdminUserForm() {
 }
 
 function editAdminUser(username, roleId, active) {
+  if (!hasPermission('users.edit')) return;
   document.getElementById('admin-user-original').value = username;
   document.getElementById('admin-user-name').value = username;
   document.getElementById('admin-user-name').disabled = true;
@@ -334,6 +392,7 @@ function editAdminUser(username, roleId, active) {
 
 async function saveAdminUser(event) {
   event.preventDefault();
+  if (!hasPermission('users.edit')) return;
   const original = document.getElementById('admin-user-original').value;
   const username = document.getElementById('admin-user-name').value.trim();
   const password = document.getElementById('admin-user-password').value;
@@ -358,6 +417,7 @@ async function saveAdminUser(event) {
 }
 
 async function deleteAdminUser(username) {
+  if (!hasPermission('users.delete')) return;
   if (!confirm(`حذف المستخدم ${username}؟`)) return;
   const response = await fetch('/api/admin/users', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -371,32 +431,29 @@ async function deleteAdminUser(username) {
 function resetAdminRoleForm() {
   document.getElementById('admin-role-form').reset();
   document.getElementById('admin-role-id').value = '';
-  document.querySelectorAll('#admin-permission-options input').forEach(input => { input.checked = false; });
+  document.getElementById('role-data-view').checked = false;
+  document.querySelectorAll('#admin-permission-options [data-role-module]').forEach(select => { select.value = 'none'; });
 }
 
 async function editAdminRole(roleId) {
+  if (!hasPermission('users.edit')) return;
   const response = await fetch('/api/admin/roles');
   const data = await response.json();
   const role = data.roles.find(item => item.id === roleId);
   if (!role) return;
   document.getElementById('admin-role-id').value = role.id;
   document.getElementById('admin-role-name').value = role.name;
-  document.querySelectorAll('#admin-permission-options input').forEach(input => {
-    input.checked = role.permissions.includes(input.value);
+  document.getElementById('role-data-view').checked = role.permissions.includes('data.view');
+  ROLE_MODULES.forEach(module => {
+    document.querySelector(`[data-role-module="${module.key}"]`).value =
+      roleModuleLevel(role.permissions, module.key);
   });
-  if (role.permissions.some(permission => DATA_MANAGEMENT_PERMISSIONS.has(permission))) {
-    document.querySelector('#admin-permission-options input[value="data.view"]').checked = true;
-  }
 }
 
 async function saveAdminRole(event) {
   event.preventDefault();
-  const permissions = [...document.querySelectorAll('#admin-permission-options input:checked')].map(input => input.value);
-  if (permissions.some(permission => DATA_MANAGEMENT_PERMISSIONS.has(permission)) &&
-      !permissions.includes('data.view')) {
-    alert('تتطلب صلاحيات إدارة البيانات تفعيل صلاحية عرض بيانات النظام.');
-    return;
-  }
+  if (!hasPermission('users.edit')) return;
+  const permissions = rolePermissionsFromForm();
   const response = await fetch('/api/admin/roles', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -411,6 +468,7 @@ async function saveAdminRole(event) {
 }
 
 async function deleteAdminRole(id) {
+  if (!hasPermission('users.delete')) return;
   if (!confirm('حذف هذا الدور؟')) return;
   const response = await fetch('/api/admin/roles', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -592,10 +650,10 @@ function renderAllocationMatrix() {
       const roster = students.length
         ? `<ul class="allocation-students">${students.map(student => `<li>${escapeHtml(student.name || '')}</li>`).join('')}</ul>`
         : '<div class="allocation-students">لا يوجد طلاب مسجلون</div>';
-      const actions = currentPermissions.has('allocations.manage') ? `
+      const actions = currentPermissions.has('allocations.edit') || currentPermissions.has('allocations.delete') ? `
         <div style="display:flex;gap:.4rem;margin-top:.55rem;">
-          <button class="btn btn-outline" style="padding:.2rem .45rem;font-size:.75rem;" onclick="editAllocation(${index})" title="تعديل التخصيص"><i class="fa-solid fa-pen"></i></button>
-          <button class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;" onclick="deleteAllocation(${index})" title="حذف التخصيص"><i class="fa-solid fa-trash"></i></button>
+          ${currentPermissions.has('allocations.edit') ? `<button class="btn btn-outline" style="padding:.2rem .45rem;font-size:.75rem;" onclick="editAllocation(${index})" title="تعديل التخصيص"><i class="fa-solid fa-pen"></i></button>` : ''}
+          ${currentPermissions.has('allocations.delete') ? `<button class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;" onclick="deleteAllocation(${index})" title="حذف التخصيص"><i class="fa-solid fa-trash"></i></button>` : ''}
         </div>` : '';
       const colorStyle = `--room-color:${roomColor(slot.room)}`;
       return `
@@ -619,7 +677,7 @@ function renderAllocationRooms() {
     ? db.rooms.map((room, index) => `
       <span class="allocation-room-chip" style="--room-color:${roomColor(room)}">
         <span class="allocation-room-name">${escapeHtml(room)}</span>
-        ${currentPermissions.has('allocations.manage') ? `<button type="button" class="btn btn-danger" style="padding:.15rem .4rem;font-size:.72rem;" onclick="deleteAllocationRoom(${index})" aria-label="حذف ${escapeHtml(room)}"><i class="fa-solid fa-xmark"></i></button>` : ''}
+        ${currentPermissions.has('allocations.delete') ? `<button type="button" class="btn btn-danger" style="padding:.15rem .4rem;font-size:.72rem;" onclick="deleteAllocationRoom(${index})" aria-label="حذف ${escapeHtml(room)}"><i class="fa-solid fa-xmark"></i></button>` : ''}
       </span>`).join('')
     : '<span style="color:var(--text-muted);">لم تتم إضافة قاعات بعد.</span>';
 }
@@ -644,6 +702,7 @@ function addAllocationRoom(event) {
 }
 
 function deleteAllocationRoom(index) {
+  if (!hasPermission('allocations.delete')) return;
   const room = db.rooms[index];
   if (!room) return;
   if (db.allocations.some(slot => slot.room === room)) {
@@ -772,6 +831,7 @@ function saveAllocation() {
 }
 
 function deleteAllocation(index) {
+  if (!hasPermission('allocations.delete')) return;
   const slot = db.allocations[index];
   if (!slot) return;
   requireAllocationPermission(() => {
@@ -924,6 +984,14 @@ function renderCoursesTable() {
       const studentCount = c.students.length;
       const fee = c.fee || c.students[0]?.fee || 2200;
       const instructorPercentage = getCourseInstructorPercentage(c);
+      const hasCoursePayments = c.students.some(student =>
+        student.paid || (student.sessions || []).some(session => session.paid50)
+      );
+      const hasAttendance = c.students.some(student => student.sessions?.length);
+      const canDeleteCourse = currentPermissions.has('courses.delete') &&
+        (!studentCount || currentPermissions.has('students.delete')) &&
+        (!hasAttendance || currentPermissions.has('attendance.delete')) &&
+        (!hasCoursePayments || currentPermissions.has('payments.delete'));
       let totalPaidCourse = 0;
       let totalSessionCashCollected = 0;
       let totalSessionTransferCollected = 0;
@@ -954,12 +1022,8 @@ function renderCoursesTable() {
             <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.82rem;" onclick="openCourseSessionManager(${idx})">
               <i class="fa-solid fa-clipboard-user"></i> فتح الحصة والحضور
             </button>
-            <button class="btn btn-outline" style="padding: 0.4rem 0.65rem; font-size: 0.82rem;" onclick="openEditCourseModalWithLock(${idx})" title="تعديل المادة">
-              <i class="fa-solid fa-pen-to-square"></i>
-            </button>
-            <button class="btn btn-danger" style="padding: 0.4rem 0.65rem; font-size: 0.82rem;" onclick="deleteCourseWithLock(${idx})" title="حذف المادة">
-              <i class="fa-solid fa-trash"></i>
-            </button>
+            ${currentPermissions.has('courses.edit') ? `<button class="btn btn-outline" style="padding: 0.4rem 0.65rem; font-size: 0.82rem;" onclick="openEditCourseModalWithLock(${idx})" title="تعديل المادة"><i class="fa-solid fa-pen-to-square"></i></button>` : ''}
+            ${canDeleteCourse ? `<button class="btn btn-danger" style="padding: 0.4rem 0.65rem; font-size: 0.82rem;" onclick="deleteCourseWithLock(${idx})" title="حذف المادة"><i class="fa-solid fa-trash"></i></button>` : ''}
           </td>
         </tr>
       `;
@@ -973,22 +1037,22 @@ function filterCoursesList() {
 }
 
 function deleteCourseWithLock(idx) {
-  requirePermission('courses.manage', () => {
+  requireDeletePermission('courses.manage', () => {
     const course = db.courses[idx];
     if (!course) return;
-    if (course.students.length && !currentPermissions.has('students.manage')) {
-      alert(`ليس لديك صلاحية ${PERMISSION_LABELS['students.manage']}.`);
+    if (course.students.length && !currentPermissions.has('students.delete')) {
+      alert(`ليس لديك صلاحية ${PERMISSION_LABELS['students.delete']}.`);
       return;
     }
-    if (course.students.length && !currentPermissions.has('attendance.manage')) {
-      alert(`ليس لديك صلاحية ${PERMISSION_LABELS['attendance.manage']}.`);
+    if (course.students.some(student => student.sessions?.length) && !currentPermissions.has('attendance.delete')) {
+      alert(`ليس لديك صلاحية ${PERMISSION_LABELS['attendance.delete']}.`);
       return;
     }
     const hasPayments = course.students.some(student =>
       student.paid || (student.sessions || []).some(session => session.paid50)
     );
-    if (hasPayments && !currentPermissions.has('payments.manage')) {
-      alert(`ليس لديك صلاحية ${PERMISSION_LABELS['payments.manage']}.`);
+    if (hasPayments && !currentPermissions.has('payments.delete')) {
+      alert(`ليس لديك صلاحية ${PERMISSION_LABELS['payments.delete']}.`);
       return;
     }
     const message = `هل أنت متأكد من حذف مادة "${course.name}"؟ سيتم حذف ${course.students.length} طالبًا وسجلات الحضور ورسوم الحصص المرتبطة بها. ستظل دفعات الكورس المسجلة في سجل الإيرادات.`;
@@ -1049,6 +1113,9 @@ function renderCourseStudents(cIdx) {
     const isAtt = sessForDate ? sessForDate.present : false;
     const isPaid50 = sessForDate ? sessForDate.paid50 : false;
     const paid50Method = isPaid50 ? (sessForDate.paid50Method || 'cash') : null;
+    const canDeleteStudent = currentPermissions.has('students.delete') &&
+      (!(s.sessions || []).length || currentPermissions.has('attendance.delete')) &&
+      (!(s.paid || s.sessions?.some(session => session.paid50)) || currentPermissions.has('payments.delete'));
 
     html += `
       <tr>
@@ -1059,30 +1126,28 @@ function renderCourseStudents(cIdx) {
         <td style="color:#16a34a; font-weight:700;">${s.paid || 0} ج.م</td>
         <td>${badgeRem}</td>
         <td>
-          <button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="openPayCourseModalWithLock(${sIdx})">
+          ${currentPermissions.has('payments.edit') ? `<button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="openPayCourseModalWithLock(${sIdx})">
             <i class="fa-solid fa-hand-holding-dollar"></i> تسديد 🔒
-          </button>
+          </button>` : ''}
         </td>
         <td style="text-align: center;">
-          <div class="check-toggle ${isAtt ? 'checked' : ''}" onclick="handleAttendanceClick(${sIdx}, ${isAtt})">
-            <i class="fa-solid fa-check"></i>
-          </div>
+          ${currentPermissions.has('attendance.edit') ? `<div class="check-toggle ${isAtt ? 'checked' : ''}" onclick="handleAttendanceClick(${sIdx}, ${isAtt})"><i class="fa-solid fa-check"></i></div>` : (isAtt ? 'حاضر' : 'غائب')}
         </td>
         <td style="text-align: center;">
-          <div class="session-payment-options" role="group" aria-label="طريقة دفع رسوم الحصة">
+          ${currentPermissions.has('payments.edit') && currentPermissions.has('attendance.edit') ? `<div class="session-payment-options" role="group" aria-label="طريقة دفع رسوم الحصة">
             <button type="button" class="session-payment-option cash ${paid50Method === 'cash' ? 'selected' : ''}" aria-pressed="${paid50Method === 'cash'}" onclick="handleSessionPay50Click(${sIdx}, 'cash')">نقداً</button>
             <button type="button" class="session-payment-option transfer ${paid50Method === 'transfer' ? 'selected' : ''}" aria-pressed="${paid50Method === 'transfer'}" onclick="handleSessionPay50Click(${sIdx}, 'transfer')">تحويل</button>
-          </div>
+          </div>` : (isPaid50 ? (paid50Method === 'transfer' ? 'تحويل' : 'نقداً') : '—')}
         </td>
         <td>
-          <button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; color: #2563eb;" title="تعديل الهاتف أو الاسم" onclick="openEditStudentModalWithLock(${sIdx})">
+          ${currentPermissions.has('students.edit') ? `<button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; color: #2563eb;" title="تعديل الهاتف أو الاسم" onclick="openEditStudentModalWithLock(${sIdx})">
             <i class="fa-solid fa-pen-to-square"></i> تعديل
-          </button>
+          </button>` : ''}
         </td>
         <td>
-          <button class="btn btn-danger" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="deleteStudentFromCourseWithLock(${sIdx})">
+          ${canDeleteStudent ? `<button class="btn btn-danger" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="deleteStudentFromCourseWithLock(${sIdx})">
             <i class="fa-solid fa-trash"></i>
-          </button>
+          </button>` : ''}
         </td>
       </tr>
     `;
@@ -1202,12 +1267,12 @@ function confirmPaymentCourse() {
 
 // Delete student with lock
 function deleteStudentFromCourseWithLock(sIdx) {
-  requirePermission('students.manage', () => {
+  requireDeletePermission('students.manage', () => {
     const student = db.courses[currentCourseIndex]?.students[sIdx];
     if (!student) return;
-    if (student.sessions?.length && !hasPermission('attendance.manage')) return;
+    if (student.sessions?.length && !hasPermission('attendance.delete')) return;
     if ((student.paid || student.sessions?.some(session => session.paid50)) &&
-        !hasPermission('payments.manage')) return;
+        !hasPermission('payments.delete')) return;
     if (confirm('هل أنت متأكد تماماً من حذف هذا الطالب من المادة؟')) {
       db.courses[currentCourseIndex].students.splice(sIdx, 1);
       saveDB();
@@ -1233,7 +1298,6 @@ function openAddStudentToCourseModalWithLock() {
 
 function saveNewStudentToCurrentCourse() {
   if (!hasPermission('students.manage')) return;
-  if (!hasPermission('attendance.manage')) return;
   const name = document.getElementById('new-stu-name').value.trim();
   const phone = document.getElementById('new-stu-phone').value.trim();
   const fee = parseFloat(document.getElementById('new-stu-fee').value);
@@ -1251,7 +1315,9 @@ function saveNewStudentToCurrentCourse() {
     phone: phone,
     fee: fee,
     paid: paid,
-    sessions: [{ date: curDate, present: true, paid50: false }]
+    sessions: currentPermissions.has('attendance.edit')
+      ? [{ date: curDate, present: true, paid50: false }]
+      : []
   };
 
   if (paid > 0) {
@@ -1367,9 +1433,9 @@ function renderStudentsDirectory() {
                   <td style="color:#16a34a; font-weight:700;">${co.sessionCashIncome.toLocaleString()} ج.م</td>
                   <td style="color:#2563eb; font-weight:700;">${co.sessionTransferIncome.toLocaleString()} ج.م</td>
                   <td>
-                    <button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="editStudentFromDirectory(${co.courseIndex}, ${co.studentIndex})">
+                    ${currentPermissions.has('students.edit') ? `<button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="editStudentFromDirectory(${co.courseIndex}, ${co.studentIndex})">
                       <i class="fa-solid fa-pen-to-square"></i> تعديل
-                    </button>
+                    </button>` : ''}
                   </td>
                 </tr>
               `).join('')}
@@ -1450,12 +1516,12 @@ function renderWorkspaceTable() {
         <td>${w.extra_item || '-'}</td>
         <td style="color:#16a34a; font-weight:800;">${w.total ?? 60} ج.م</td>
         <td>
-          <button class="btn btn-outline" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="openEditWorkspaceEntryWithLock(${realIdx})" title="تعديل السجل">
+          ${currentPermissions.has('workspace.edit') ? `<button class="btn btn-outline" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="openEditWorkspaceEntryWithLock(${realIdx})" title="تعديل السجل">
             <i class="fa-solid fa-pen-to-square"></i>
-          </button>
-          <button class="btn btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="deleteWorkspaceEntryWithLock(${realIdx})">
+          </button>` : ''}
+          ${currentPermissions.has('workspace.delete') ? `<button class="btn btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="deleteWorkspaceEntryWithLock(${realIdx})">
             <i class="fa-solid fa-trash"></i>
-          </button>
+          </button>` : ''}
         </td>
       </tr>
     `;
@@ -1463,6 +1529,7 @@ function renderWorkspaceTable() {
 }
 
 function openAddWorkspaceModal() {
+  if (!hasPermission('workspace.edit')) return;
   const now = new Date();
   const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   document.getElementById('ws-new-date').value = todayStr;
@@ -1506,7 +1573,7 @@ function saveNewWorkspaceEntry() {
 }
 
 function deleteWorkspaceEntryWithLock(idx) {
-  requirePermission('workspace.manage', () => {
+  requireDeletePermission('workspace.manage', () => {
     if (confirm('هل أنت متأكد من حذف هذا السجل؟')) {
       db.workspace.splice(idx, 1);
       saveDB();
@@ -1611,16 +1678,16 @@ function renderExpensesTable() {
         <td><span class="badge badge-warning">${escapeHtml(expense.type || '')}</span></td>
         <td style="color:#dc2626; font-weight:800;">${Number(expense.amount || 0).toLocaleString()} ج.م</td>
         <td>
-          <button class="btn btn-danger" style="padding:0.25rem 0.6rem; font-size:0.8rem;" onclick="deleteExpenseWithLock(${index})" title="حذف المصروف">
+          ${currentPermissions.has('expenses.delete') ? `<button class="btn btn-danger" style="padding:0.25rem 0.6rem; font-size:0.8rem;" onclick="deleteExpenseWithLock(${index})" title="حذف المصروف">
             <i class="fa-solid fa-trash"></i> حذف
-          </button>
+          </button>` : ''}
         </td>
       </tr>
     `).join('');
 }
 
 function deleteExpenseWithLock(index) {
-  requirePermission('expenses.manage', () => {
+  requireDeletePermission('expenses.manage', () => {
     if (!db.expenses[index] || !confirm('هل أنت متأكد من حذف هذا المصروف؟')) return;
     db.expenses.splice(index, 1);
     saveDB();
@@ -1672,10 +1739,12 @@ function renderOwnersTable() {
   tbody.innerHTML = owners.map((owner, index) => `
     <tr>
       <td style="font-weight:700;">${escapeHtml(owner.name)}</td>
-      <td><input type="number" id="owner-rate-${index}" min="0.01" max="100" step="0.01" value="${Number(owner.percentage)}" aria-label="نسبة ${escapeHtml(owner.name)}"></td>
+      <td>${currentPermissions.has('closing.edit')
+        ? `<input type="number" id="owner-rate-${index}" min="0.01" max="100" step="0.01" value="${Number(owner.percentage)}" aria-label="نسبة ${escapeHtml(owner.name)}">`
+        : `${Number(owner.percentage).toFixed(2)}%`}</td>
       <td>
-        <button class="btn btn-outline" style="padding:0.25rem 0.6rem; font-size:0.8rem;" onclick="updateOwnerPercentage(${index})" title="حفظ النسبة"><i class="fa-solid fa-check"></i></button>
-        <button class="btn btn-danger" style="padding:0.25rem 0.6rem; font-size:0.8rem;" onclick="deleteOwnerWithLock(${index})" title="حذف المالك"><i class="fa-solid fa-trash"></i></button>
+        ${currentPermissions.has('closing.edit') ? `<button class="btn btn-outline" style="padding:0.25rem 0.6rem; font-size:0.8rem;" onclick="updateOwnerPercentage(${index})" title="حفظ النسبة"><i class="fa-solid fa-check"></i></button>` : ''}
+        ${currentPermissions.has('closing.delete') ? `<button class="btn btn-danger" style="padding:0.25rem 0.6rem; font-size:0.8rem;" onclick="deleteOwnerWithLock(${index})" title="حذف المالك"><i class="fa-solid fa-trash"></i></button>` : ''}
       </td>
     </tr>
   `).join('') + `
@@ -1705,7 +1774,7 @@ function updateOwnerPercentage(index) {
 }
 
 function deleteOwnerWithLock(index) {
-  requirePermission('closing.manage', () => {
+  requireDeletePermission('closing.manage', () => {
     if (!db.owners[index] || !confirm('سيبقى اسم المالك وتوزيعه محفوظين في الإقفالات السابقة. هل تريد حذف المالك من الإقفالات المستقبلية؟')) return;
     db.owners.splice(index, 1);
     saveDB();
@@ -1918,8 +1987,10 @@ function renderClosings() {
         <td>
           ${owner.status === 'paid'
             ? `<span class="badge badge-success">تم التوزيع ${owner.distributionDate ? `في ${escapeHtml(owner.distributionDate)}` : ''}</span>`
-            : `<input type="date" id="distribution-date-${closingIndex}-${ownerIndex}" aria-label="تاريخ توزيع حصة ${escapeHtml(owner.name)}">
-               <button class="btn btn-success" style="padding:0.25rem 0.6rem; font-size:0.8rem;" onclick="markOwnerDistributionPaid(${closingIndex}, ${ownerIndex})">تسجيل التوزيع</button>`}
+            : currentPermissions.has('closing.edit')
+              ? `<input type="date" id="distribution-date-${closingIndex}-${ownerIndex}" aria-label="تاريخ توزيع حصة ${escapeHtml(owner.name)}">
+                 <button class="btn btn-success" style="padding:0.25rem 0.6rem; font-size:0.8rem;" onclick="markOwnerDistributionPaid(${closingIndex}, ${ownerIndex})">تسجيل التوزيع</button>`
+              : '<span class="badge badge-warning">لم يتم التوزيع</span>'}
         </td>
       </tr>
     `).join('');
@@ -1940,7 +2011,7 @@ function renderClosings() {
             <tbody>${distributions || '<tr><td colspan="4">لا توجد حصص ملاك في هذا الإقفال</td></tr>'}</tbody>
           </table>
         </div>
-        ${closed ? '' : `<div style="text-align:left; margin-top:1rem;"><button class="btn btn-primary" onclick="closeFinancialPeriodWithLock(${closingIndex})"><i class="fa-solid fa-lock"></i> اعتماد وإقفال الفترة</button></div>`}
+        ${closed || !currentPermissions.has('closing.edit') ? '' : `<div style="text-align:left; margin-top:1rem;"><button class="btn btn-primary" onclick="closeFinancialPeriodWithLock(${closingIndex})"><i class="fa-solid fa-lock"></i> اعتماد وإقفال الفترة</button></div>`}
       </article>
     `;
   }).join('');
@@ -2047,7 +2118,7 @@ function saveNewCourse() {
 
 // ================= BACKUP & EXPORT/IMPORT =================
 async function exportDataBackup() {
-  if (!currentPermissions.has('backups.manage')) {
+  if (!currentPermissions.has('backups.view')) {
     alert('ليس لديك صلاحية إدارة النسخ الاحتياطية.');
     return;
   }
@@ -2068,6 +2139,7 @@ async function exportDataBackup() {
 }
 
 function sendBackupToEmail() {
+  if (!hasPermission('backups.edit')) return;
   const email = prompt('أدخل عنوان البريد الإلكتروني الذي تريد إرسال النسخة الاحتياطية إليه:');
   if (email === null) return;
 
@@ -2077,7 +2149,7 @@ function sendBackupToEmail() {
     return;
   }
 
-  requirePermission('backups.manage', () => {
+  requirePermission('backups.edit', () => {
     deliverBackupEmail(recipient);
   });
 }
@@ -2104,7 +2176,7 @@ function importDataBackup(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  requirePermission('backups.manage', () => {
+  requirePermission('backups.delete', () => {
     const reader = new FileReader();
     reader.onload = async function(e) {
       try {
