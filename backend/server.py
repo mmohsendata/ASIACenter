@@ -46,6 +46,15 @@ PERMISSIONS = {
     "backups.manage",
     "users.manage",
 }
+DATA_MANAGEMENT_PERMISSIONS = {
+    "courses.manage",
+    "students.manage",
+    "attendance.manage",
+    "payments.manage",
+    "workspace.manage",
+    "expenses.manage",
+    "closing.manage",
+}
 ALL_PERMISSIONS = sorted(PERMISSIONS)
 
 
@@ -608,6 +617,9 @@ class Handler(SimpleHTTPRequestHandler):
                 action = data.get("action")
                 if action == "delete":
                     role_id = str(data.get("id") or "")
+                    if not any(role["id"] == role_id for role in store["roles"]):
+                        self._send_json({"ok": False, "error": "Role not found."}, 404)
+                        return
                     if any(user["roleId"] == role_id for user in store["users"].values()):
                         self._send_json({"ok": False, "error": "Role is assigned to users."}, 409)
                         return
@@ -619,6 +631,16 @@ class Handler(SimpleHTTPRequestHandler):
                     if (not name or len(name) > 80 or not isinstance(permissions, list) or
                             any(not isinstance(item, str) or item not in PERMISSIONS for item in permissions)):
                         self._send_json({"ok": False, "error": "Invalid role name or permissions."}, 400)
+                        return
+                    if DATA_MANAGEMENT_PERMISSIONS.intersection(permissions) and "data.view" not in permissions:
+                        self._send_json({
+                            "ok": False,
+                            "error": "Data-management permissions require data.view.",
+                        }, 400)
+                        return
+                    if any(role["id"] != role_id and role["name"].casefold() == name.casefold()
+                           for role in store["roles"]):
+                        self._send_json({"ok": False, "error": "A role with that name already exists."}, 409)
                         return
                     if role_id:
                         role = next((item for item in store["roles"] if item["id"] == role_id), None)

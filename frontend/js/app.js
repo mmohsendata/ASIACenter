@@ -17,25 +17,33 @@ const PERMISSION_LABELS = {
   "users.manage": "إدارة المستخدمين والأدوار"
 };
 
-function permissionForAction(promptMsg) {
-  if (/حضور/.test(promptMsg)) return "attendance.manage";
-  if (/دفع|دفعة/.test(promptMsg)) return "payments.manage";
-  if (/طالب/.test(promptMsg)) return "students.manage";
-  if (/ورك سبيس/.test(promptMsg)) return "workspace.manage";
-  if (/مصروف/.test(promptMsg)) return "expenses.manage";
-  if (/مالك|إقفال|الفترة المالية|توزيع/.test(promptMsg)) return "closing.manage";
-  if (/مادة|الكورس|تخصيص|توزيع|قاعة|قاعات|جدول/.test(promptMsg)) return "courses.manage";
-  if (/نسخة احتياطية|نسخة سابقة/.test(promptMsg)) return "backups.manage";
-  return "data.view";
+const TAB_PERMISSIONS = {
+  daily: "data.view",
+  courses: ["courses.manage", "students.manage", "attendance.manage", "payments.manage"],
+  allocation: "courses.manage",
+  students: "students.manage",
+  professors: "courses.manage",
+  workspace: "workspace.manage",
+  expenses: "expenses.manage",
+  closing: "closing.manage",
+  admin: "users.manage"
+};
+const DATA_MANAGEMENT_PERMISSIONS = new Set([
+  "courses.manage", "students.manage", "attendance.manage", "payments.manage",
+  "workspace.manage", "expenses.manage", "closing.manage"
+]);
+
+function requirePermission(permission, callback) {
+  if (!hasPermission(permission)) return;
+  callback();
 }
 
-function requirePin(promptMsg, callback) {
-  const permission = permissionForAction(promptMsg || '');
+function hasPermission(permission) {
   if (!currentPermissions.has(permission)) {
     alert(`ليس لديك صلاحية ${PERMISSION_LABELS[permission] || permission}.`);
-    return;
+    return false;
   }
-  callback();
+  return true;
 }
 
 function openChangePasswordModal() {
@@ -112,6 +120,7 @@ async function initDB() {
   applyPermissionsToUI();
   if (!currentPermissions.has('data.view')) {
     if (currentPermissions.has('users.manage')) switchTab('admin');
+    else switchTab('access-denied');
     return true;
   }
   const dataRes = await fetch('/api/data');
@@ -214,8 +223,14 @@ async function logoutUser() {
 }
 
 function applyPermissionsToUI() {
-  document.querySelectorAll('[data-permission]').forEach(element => {
-    element.style.display = currentPermissions.has(element.dataset.permission) ? '' : 'none';
+  document.querySelectorAll('[data-permission], [data-page-permission]').forEach(element => {
+    const hasElementPermission = !element.dataset.permission ||
+      currentPermissions.has(element.dataset.permission);
+    const pagePermissions = element.dataset.pagePermission?.split(',') || [];
+    const hasPagePermission = !pagePermissions.length ||
+      (currentPermissions.has('data.view') &&
+        pagePermissions.some(permission => currentPermissions.has(permission)));
+    element.style.display = hasElementPermission && hasPagePermission ? '' : 'none';
   });
 }
 
@@ -249,7 +264,7 @@ async function loadAdminPage() {
   };
   document.getElementById('admin-permission-options').innerHTML = rolesData.permissions.map(permission => `
     <label style="display:flex;gap:.5rem;align-items:center;">
-      <input type="checkbox" value="${escapeHtml(permission)}"> ${escapeHtml(labels[permission] || permission)}
+      <input type="checkbox" value="${escapeHtml(permission)}" onchange="handleRolePermissionChange(this)"> ${escapeHtml(labels[permission] || permission)}
     </label>`).join('');
   document.getElementById('admin-roles-list').innerHTML = rolesData.roles.map(role => `
     <div style="display:flex;gap:.7rem;align-items:center;margin:.5rem 0;">
@@ -257,6 +272,21 @@ async function loadAdminPage() {
       <button class="btn btn-outline" onclick="editAdminRole('${escapeHtml(role.id)}')">تعديل</button>
       <button class="btn btn-danger" onclick="deleteAdminRole('${escapeHtml(role.id)}')">حذف</button>
     </div>`).join('');
+}
+
+function handleRolePermissionChange(input) {
+  const dataViewInput = document.querySelector('#admin-permission-options input[value="data.view"]');
+  if (!dataViewInput) return;
+  if (input.value === 'data.view' && !input.checked) {
+    const hasDataManagement = [...document.querySelectorAll('#admin-permission-options input:checked')]
+      .some(permission => DATA_MANAGEMENT_PERMISSIONS.has(permission.value));
+    if (hasDataManagement) {
+      input.checked = true;
+      alert('يجب الإبقاء على صلاحية عرض بيانات النظام مع صلاحيات إدارة البيانات.');
+    }
+    return;
+  }
+  if (input.checked && DATA_MANAGEMENT_PERMISSIONS.has(input.value)) dataViewInput.checked = true;
 }
 
 function resetAdminUserForm() {
@@ -327,11 +357,19 @@ async function editAdminRole(roleId) {
   document.querySelectorAll('#admin-permission-options input').forEach(input => {
     input.checked = role.permissions.includes(input.value);
   });
+  if (role.permissions.some(permission => DATA_MANAGEMENT_PERMISSIONS.has(permission))) {
+    document.querySelector('#admin-permission-options input[value="data.view"]').checked = true;
+  }
 }
 
 async function saveAdminRole(event) {
   event.preventDefault();
   const permissions = [...document.querySelectorAll('#admin-permission-options input:checked')].map(input => input.value);
+  if (permissions.some(permission => DATA_MANAGEMENT_PERMISSIONS.has(permission)) &&
+      !permissions.includes('data.view')) {
+    alert('تتطلب صلاحيات إدارة البيانات تفعيل صلاحية عرض بيانات النظام.');
+    return;
+  }
   const response = await fetch('/api/admin/roles', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -361,8 +399,15 @@ let currentCourseIndex = null;
 
 // Tab switcher
 function switchTab(tabId) {
-  if (tabId === 'admin' && !currentPermissions.has('users.manage')) return;
-  if (tabId === 'allocation' && !currentPermissions.has('courses.manage')) return;
+  const requiredPermission = TAB_PERMISSIONS[tabId];
+  if (requiredPermission) {
+    if (tabId !== 'admin' && !currentPermissions.has('data.view')) return;
+    const hasTabPermission = Array.isArray(requiredPermission)
+      ? requiredPermission.some(permission => currentPermissions.has(permission))
+      : currentPermissions.has(requiredPermission);
+    if (!hasTabPermission) return;
+  }
+  if (tabId === 'access-denied' && currentPermissions.has('data.view')) return;
   document.querySelectorAll('section').forEach(s => s.style.display = 'none');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.bottom-bar-item').forEach(b => b.classList.remove('active'));
@@ -554,7 +599,7 @@ function renderAllocationRooms() {
 
 function addAllocationRoom(event) {
   event.preventDefault();
-  requirePin('إضافة قاعة جديدة تتطلب صلاحية إدارة المواد والتخصيصات', () => {
+  requirePermission('courses.manage', () => {
     const input = document.getElementById('allocation-room-name');
     const room = input.value.trim();
     if (!room) return;
@@ -578,7 +623,7 @@ function deleteAllocationRoom(index) {
     alert('لا يمكن حذف القاعة قبل نقل أو حذف التخصيصات المرتبطة بها.');
     return;
   }
-  requirePin('حذف قاعة يتطلب صلاحية إدارة المواد والتخصيصات', () => {
+  requirePermission('courses.manage', () => {
     if (!confirm(`حذف القاعة "${room}"؟`)) return;
     db.rooms.splice(index, 1);
     delete db.roomColors[room];
@@ -688,7 +733,7 @@ function saveAllocation() {
     return;
   }
 
-  requirePin('تعديل توزيع المواد على القاعات والأوقات يتطلب صلاحية إدارة المواد', () => {
+  requirePermission('courses.manage', () => {
     const index = db.allocations.findIndex(item => item.id === id);
     if (index >= 0) db.allocations[index] = slot;
     else db.allocations.push(slot);
@@ -702,7 +747,7 @@ function saveAllocation() {
 function deleteAllocation(index) {
   const slot = db.allocations[index];
   if (!slot) return;
-  requirePin('حذف تخصيص مادة يتطلب صلاحية إدارة المواد', () => {
+  requirePermission('courses.manage', () => {
     if (!confirm(`حذف تخصيص "${slot.courseName}" يوم ${ALLOCATION_DAYS[slot.day]}؟`)) return;
     db.allocations.splice(index, 1);
     saveDB();
@@ -886,7 +931,7 @@ function filterCoursesList() {
 }
 
 function deleteCourseWithLock(idx) {
-  requirePin('حذف المادة: حذف المادة وبيانات الطلاب يتطلب صلاحية إدارة المواد', () => {
+  requirePermission('courses.manage', () => {
     const course = db.courses[idx];
     if (!course) return;
     if (course.students.length && !currentPermissions.has('students.manage')) {
@@ -1003,16 +1048,11 @@ function renderCourseStudents(cIdx) {
 
 // Attendance Click with Lock on Uncheck/Modification
 function handleAttendanceClick(sIdx, isCurrentlyChecked) {
-  if (isCurrentlyChecked) {
-    requirePin('تعديل الحضور: إلغاء حضور الطالب يتطلب باسوورد الإدارة', () => {
-      toggleAttendanceExecute(sIdx);
-    });
-  } else {
-    toggleAttendanceExecute(sIdx);
-  }
+  requirePermission('attendance.manage', () => toggleAttendanceExecute(sIdx));
 }
 
 function toggleAttendanceExecute(sIdx) {
+  if (!hasPermission('attendance.manage')) return;
   const course = db.courses[currentCourseIndex];
   const s = course.students[sIdx];
   const curDate = document.getElementById('session-date-input').value;
@@ -1031,16 +1071,14 @@ function toggleAttendanceExecute(sIdx) {
 
 // Session 50 EGP payment Click with Lock on Uncheck/Modification
 function handleSessionPay50Click(sIdx, isCurrentlyPaid) {
-  if (isCurrentlyPaid) {
-    requirePin('تعديل مالي: إلغاء دفع الـ 50 جنيه يتطلب باسوورد الإدارة لمنع التلاعب', () => {
-      toggleSessionPay50Execute(sIdx);
-    });
-  } else {
-    toggleSessionPay50Execute(sIdx);
-  }
+  requirePermission('attendance.manage', () => {
+    requirePermission('payments.manage', () => toggleSessionPay50Execute(sIdx));
+  });
 }
 
 function toggleSessionPay50Execute(sIdx) {
+  if (!hasPermission('attendance.manage')) return;
+  if (!hasPermission('payments.manage')) return;
   const course = db.courses[currentCourseIndex];
   const s = course.students[sIdx];
   const curDate = document.getElementById('session-date-input').value;
@@ -1060,7 +1098,7 @@ function toggleSessionPay50Execute(sIdx) {
 
 // Payment modal with lock
 function openPayCourseModalWithLock(sIdx) {
-  requirePin('تسديد دفعة كورس: يتطلب باسوورد الإدارة لتسجيل أو تعديل المبالغ', () => {
+  requirePermission('payments.manage', () => {
     const s = db.courses[currentCourseIndex].students[sIdx];
     document.getElementById('pay-student-idx').value = sIdx;
     document.getElementById('pay-student-name').value = s.name;
@@ -1071,6 +1109,7 @@ function openPayCourseModalWithLock(sIdx) {
 }
 
 function confirmPaymentCourse() {
+  if (!hasPermission('payments.manage')) return;
   const sIdx = document.getElementById('pay-student-idx').value;
   const amt = parseFloat(document.getElementById('pay-amount-input').value);
   const date = document.getElementById('pay-date-input').value;
@@ -1103,7 +1142,12 @@ function confirmPaymentCourse() {
 
 // Delete student with lock
 function deleteStudentFromCourseWithLock(sIdx) {
-  requirePin('حذف طالب: حذف بيانات الطالب يتطلب باسوورد الإدارة لمنع الخطأ', () => {
+  requirePermission('students.manage', () => {
+    const student = db.courses[currentCourseIndex]?.students[sIdx];
+    if (!student) return;
+    if (student.sessions?.length && !hasPermission('attendance.manage')) return;
+    if ((student.paid || student.sessions?.some(session => session.paid50)) &&
+        !hasPermission('payments.manage')) return;
     if (confirm('هل أنت متأكد تماماً من حذف هذا الطالب من المادة؟')) {
       db.courses[currentCourseIndex].students.splice(sIdx, 1);
       saveDB();
@@ -1117,7 +1161,7 @@ function deleteStudentFromCourseWithLock(sIdx) {
 
 // Add student modal with lock
 function openAddStudentToCourseModalWithLock() {
-  requirePin('تسجيل طالب جديد: يتطلب باسوورد الإدارة لإضافة طالب للمادة', () => {
+  requirePermission('students.manage', () => {
     const course = db.courses[currentCourseIndex];
     document.getElementById('new-stu-name').value = '';
     document.getElementById('new-stu-phone').value = '';
@@ -1128,10 +1172,13 @@ function openAddStudentToCourseModalWithLock() {
 }
 
 function saveNewStudentToCurrentCourse() {
+  if (!hasPermission('students.manage')) return;
+  if (!hasPermission('attendance.manage')) return;
   const name = document.getElementById('new-stu-name').value.trim();
   const phone = document.getElementById('new-stu-phone').value.trim();
   const fee = parseFloat(document.getElementById('new-stu-fee').value);
   const paid = parseFloat(document.getElementById('new-stu-paid').value) || 0;
+  if (paid > 0 && !hasPermission('payments.manage')) return;
 
   if (!name || !Number.isFinite(fee) || fee <= 0 || !Number.isFinite(paid) || paid < 0) {
     alert('يرجى إدخال اسم الطالب وسعر ومبلغ مدفوع صحيحين');
@@ -1353,6 +1400,7 @@ function openAddWorkspaceModal() {
 }
 
 function saveNewWorkspaceEntry() {
+  if (!hasPermission('workspace.manage')) return;
   const date = document.getElementById('ws-new-date').value;
   const name = document.getElementById('ws-new-name').value.trim();
   const phone = document.getElementById('ws-new-phone').value.trim();
@@ -1383,7 +1431,7 @@ function saveNewWorkspaceEntry() {
 }
 
 function deleteWorkspaceEntryWithLock(idx) {
-  requirePin('حذف سجل ورك سبيس: يتطلب باسوورد الإدارة لمنع مسح الحسابات', () => {
+  requirePermission('workspace.manage', () => {
     if (confirm('هل أنت متأكد من حذف هذا السجل؟')) {
       db.workspace.splice(idx, 1);
       saveDB();
@@ -1394,7 +1442,7 @@ function deleteWorkspaceEntryWithLock(idx) {
 }
 
 function openEditWorkspaceEntryWithLock(idx) {
-  requirePin('تعديل سجل الورك سبيس: يتطلب باسوورد الإدارة', () => {
+  requirePermission('workspace.manage', () => {
     const entry = db.workspace[idx];
     if (!entry) return;
     document.getElementById('edit-ws-idx').value = idx;
@@ -1410,6 +1458,7 @@ function openEditWorkspaceEntryWithLock(idx) {
 }
 
 function saveEditedWorkspaceEntry() {
+  if (!hasPermission('workspace.manage')) return;
   const idx = Number(document.getElementById('edit-ws-idx').value);
   const date = document.getElementById('edit-ws-date').value;
   const name = document.getElementById('edit-ws-name').value.trim();
@@ -1449,6 +1498,7 @@ function escapeHtml(value) {
 
 function saveExpense(event) {
   event.preventDefault();
+  if (!hasPermission('expenses.manage')) return;
   const date = document.getElementById('expense-date').value;
   const name = document.getElementById('expense-name').value.trim();
   const amount = Number(document.getElementById('expense-amount').value);
@@ -1495,7 +1545,7 @@ function renderExpensesTable() {
 }
 
 function deleteExpenseWithLock(index) {
-  requirePin('حذف مصروف مسجل يتطلب كلمة مرور الإدارة', () => {
+  requirePermission('expenses.manage', () => {
     if (!db.expenses[index] || !confirm('هل أنت متأكد من حذف هذا المصروف؟')) return;
     db.expenses.splice(index, 1);
     saveDB();
@@ -1523,7 +1573,7 @@ function addOwner(event) {
     return;
   }
 
-  requirePin('إضافة مالك وتحديد نسبة أرباحه يتطلب كلمة مرور الإدارة', () => {
+  requirePermission('closing.manage', () => {
     db.owners.push({
       id: window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
       name,
@@ -1572,7 +1622,7 @@ function updateOwnerPercentage(index) {
     return;
   }
 
-  requirePin('تعديل نسبة المالك يتطلب كلمة مرور الإدارة', () => {
+  requirePermission('closing.manage', () => {
     owner.percentage = percentage;
     saveDB();
     renderOwnersTable();
@@ -1580,7 +1630,7 @@ function updateOwnerPercentage(index) {
 }
 
 function deleteOwnerWithLock(index) {
-  requirePin('حذف مالك من قائمة التوزيع يتطلب كلمة مرور الإدارة', () => {
+  requirePermission('closing.manage', () => {
     if (!db.owners[index] || !confirm('سيبقى اسم المالك وتوزيعه محفوظين في الإقفالات السابقة. هل تريد حذف المالك من الإقفالات المستقبلية؟')) return;
     db.owners.splice(index, 1);
     saveDB();
@@ -1727,7 +1777,7 @@ function createClosingWithLock() {
     return;
   }
 
-  requirePin('إنشاء إقفال مالي للفترة المحددة يتطلب كلمة مرور الإدارة', () => {
+  requirePermission('closing.manage', () => {
     const now = new Date();
     snapshot.id = window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
     snapshot.createdAt = now.toISOString();
@@ -1751,7 +1801,7 @@ function markOwnerDistributionPaid(closingIndex, ownerIndex) {
     return;
   }
 
-  requirePin('تسجيل توزيع حصة مالك يتطلب كلمة مرور الإدارة', () => {
+  requirePermission('closing.manage', () => {
     distribution.status = 'paid';
     distribution.distributionDate = date;
     saveDB();
@@ -1766,7 +1816,7 @@ function closeFinancialPeriodWithLock(closingIndex) {
     alert('سجّل توزيع جميع حصص الملاك قبل إقفال الفترة.');
     return;
   }
-  requirePin('إقفال الفترة المالية بعد مراجعة التوزيعات يتطلب كلمة مرور الإدارة', () => {
+  requirePermission('closing.manage', () => {
     closing.status = 'closed';
     closing.closedAt = new Date().toISOString();
     saveDB();
@@ -1828,7 +1878,7 @@ function closeModal(id) {
 
 // Add New Course Modal with Lock
 function openAddCourseModalWithLock() {
-  requirePin('إضافة مادة جديدة: يتطلب باسوورد الإدارة', () => {
+  requirePermission('courses.manage', () => {
     document.getElementById('new-course-name').value = '';
     document.getElementById('new-course-prof').value = '';
     document.getElementById('new-course-fee-type').value = '2200';
@@ -1840,7 +1890,7 @@ function openAddCourseModalWithLock() {
 }
 
 function openEditCourseModalWithLock(idx) {
-  requirePin('تعديل بيانات المادة: يتطلب باسوورد الإدارة', () => {
+  requirePermission('courses.manage', () => {
     const course = db.courses[idx];
     if (!course) return;
     document.getElementById('edit-course-idx').value = idx;
@@ -1853,6 +1903,7 @@ function openEditCourseModalWithLock(idx) {
 }
 
 function saveEditedCourse() {
+  if (!hasPermission('courses.manage')) return;
   const idx = Number(document.getElementById('edit-course-idx').value);
   const course = db.courses[idx];
   const name = document.getElementById('edit-course-name').value.trim();
@@ -1864,6 +1915,8 @@ function saveEditedCourse() {
   }
 
   const oldName = course.name;
+  if (oldName !== name && db.dailyPayments.some(payment => payment.courseName === oldName) &&
+      !hasPermission('payments.manage')) return;
   course.name = name;
   course.professor = document.getElementById('edit-course-prof').value.trim();
   course.fee = fee;
@@ -1888,6 +1941,7 @@ function saveEditedCourse() {
 }
 
 function saveNewCourse() {
+  if (!hasPermission('courses.manage')) return;
   const name = document.getElementById('new-course-name').value.trim();
   const feeType = document.getElementById('new-course-fee-type').value;
   let fee = parseFloat(feeType);
@@ -1948,7 +2002,7 @@ function sendBackupToEmail() {
     return;
   }
 
-  requirePin('إرسال نسخة احتياطية تحتوي على بيانات الطلاب والحسابات يتطلب كلمة مرور الإدارة', () => {
+  requirePermission('backups.manage', () => {
     deliverBackupEmail(recipient);
   });
 }
@@ -1975,7 +2029,7 @@ function importDataBackup(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  requirePin('استرجاع نسخة سابقة: يتطلب صلاحية إدارة النسخ الاحتياطية لأنه سيستبدل بيانات النظام', () => {
+  requirePermission('backups.manage', () => {
     const reader = new FileReader();
     reader.onload = async function(e) {
       try {
@@ -2014,7 +2068,7 @@ function importDataBackup(event) {
 
 // ================= EDIT STUDENT & PRINT SHEET LOGIC =================
 function openEditStudentModalWithLock(sIdx) {
-  requirePin('تعديل بيانات الطالب: يتطلب باسوورد الإدارة', () => {
+  requirePermission('students.manage', () => {
     const course = db.courses[currentCourseIndex];
     const s = course.students[sIdx];
     document.getElementById('edit-stu-idx').value = sIdx;
@@ -2026,6 +2080,7 @@ function openEditStudentModalWithLock(sIdx) {
 }
 
 function saveEditedStudent() {
+  if (!hasPermission('students.manage')) return;
   const sIdx = document.getElementById('edit-stu-idx').value;
   const name = document.getElementById('edit-stu-name').value.trim();
   const phone = document.getElementById('edit-stu-phone').value.trim();
@@ -2039,6 +2094,9 @@ function saveEditedStudent() {
   const course = db.courses[currentCourseIndex];
   const s = course.students[sIdx];
   const oldName = s.name;
+  if ((oldName !== name || s.phone !== phone) &&
+      db.dailyPayments.some(payment => payment.courseName === course.name && payment.studentName === oldName) &&
+      !hasPermission('payments.manage')) return;
 
   s.name = name;
   s.phone = phone;

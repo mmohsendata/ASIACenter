@@ -38,21 +38,21 @@
 </header>
 
 <div class="nav-bar">
-  <div class="nav-item active" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> تصفية دخل اليوم</div>
-  <div class="nav-item" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> إدارة المواد والحصص</div>
-  <div class="nav-item" data-permission="courses.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> توزيع القاعات والجداول</div>
-  <div class="nav-item" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> بحث وشيت الطلاب</div>
-  <div class="nav-item" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> حسابات المعيدين ونسبة السنتر</div>
-  <div class="nav-item" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> شيت الورك سبيس</div>
-  <div class="nav-item" onclick="switchTab('expenses')"><i class="fa-solid fa-receipt"></i> المصروفات</div>
-  <div class="nav-item" onclick="switchTab('closing')"><i class="fa-solid fa-chart-pie"></i> الأرباح والإقفال</div>
+  <div class="nav-item active" data-page-permission="data.view" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> تصفية دخل اليوم</div>
+  <div class="nav-item" data-page-permission="courses.manage,students.manage,attendance.manage,payments.manage" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> إدارة المواد والحصص</div>
+  <div class="nav-item" data-page-permission="courses.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> توزيع القاعات والجداول</div>
+  <div class="nav-item" data-page-permission="students.manage" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> بحث وشيت الطلاب</div>
+  <div class="nav-item" data-page-permission="courses.manage" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> حسابات المعيدين ونسبة السنتر</div>
+  <div class="nav-item" data-page-permission="workspace.manage" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> شيت الورك سبيس</div>
+  <div class="nav-item" data-page-permission="expenses.manage" onclick="switchTab('expenses')"><i class="fa-solid fa-receipt"></i> المصروفات</div>
+  <div class="nav-item" data-page-permission="closing.manage" onclick="switchTab('closing')"><i class="fa-solid fa-chart-pie"></i> الأرباح والإقفال</div>
   <div class="nav-item" data-permission="users.manage" onclick="switchTab('admin')"><i class="fa-solid fa-user-shield"></i> إدارة المستخدمين</div>
 </div>
 
 <div class="container">
 
   <!-- ================= TAB 1: DAILY FILTER & TODAY REVENUE ================= -->
-  <section id="tab-daily">
+  <section id="tab-daily" data-page-permission="data.view">
     <div class="box" style="background: linear-gradient(135deg, #1e3a8a, #2563eb); color: white;">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div>
@@ -123,7 +123,7 @@
   </section>
 
   <!-- ================= TAB 2: COURSES & SESSIONS ================= -->
-  <section id="tab-courses" style="display: none;">
+  <section id="tab-courses" data-page-permission="courses.manage,students.manage,attendance.manage,payments.manage" style="display: none;">
     <div class="box">
       <div class="box-header">
         <div class="box-title"><i class="fa-solid fa-book" style="color: var(--primary-light);"></i> قائمة المواد والكورسات المتاحة</div>
@@ -200,7 +200,7 @@
     </div>
   </section>
 
-  <section id="tab-allocation" style="display: none;">
+  <section id="tab-allocation" data-page-permission="courses.manage" style="display: none;">
     <div class="box">
       <div class="box-header">
         <div>
@@ -232,7 +232,7 @@
   </section>
 
   <!-- ================= TAB 3: SEARCH ALL STUDENTS ================= -->
-  <section id="tab-students" style="display: none;">
+  <section id="tab-students" data-page-permission="students.manage" style="display: none;">
     <div class="box">
       <div class="box-header">
         <div class="box-title"><i class="fa-solid fa-address-book" style="color: var(--primary-light);"></i> الاستعلام الشامل عن الطلاب والمواد المسجلة</div>
@@ -248,7 +248,7 @@
   </section>
 
   <!-- ================= TAB 4: PROFESSORS & REVENUE SPLIT ================= -->
-  <section id="tab-professors" style="display: none;">
+  <section id="tab-professors" data-page-permission="courses.manage" style="display: none;">
     <div class="box">
       <div class="box-header">
         <div>
@@ -282,7 +282,7 @@
   </section>
 
   <!-- ================= TAB 5: WORKSPACE ================= -->
-  <section id="tab-workspace" style="display: none;">
+  <section id="tab-workspace" data-page-permission="workspace.manage" style="display: none;">
     <div class="box">
       <div class="box-header">
         <div class="box-title"><i class="fa-solid fa-laptop-code" style="color: #9333ea;"></i> شيت الورك سبيس (تسجيل اليومية والحسابات)</div>
@@ -313,7 +313,7 @@
   </section>
 
   <!-- ================= TAB 6: EXPENSES ================= -->
-  <section id="tab-expenses" style="display: none;">
+  <section id="tab-expenses" data-page-permission="expenses.manage" style="display: none;">
     <div class="box">
       <div class="box-header">
         <div class="box-title"><i class="fa-solid fa-receipt" style="color: var(--danger);"></i> تسجيل المصروفات</div>
@@ -363,7 +363,7 @@
   </section>
 
   <!-- ================= TAB 7: PROFIT AND CLOSING ================= -->
-  <section id="tab-closing" style="display: none;">
+  <section id="tab-closing" data-page-permission="closing.manage" style="display: none;">
     <div class="box">
       <div class="box-header">
         <div>
@@ -420,7 +420,7 @@
     </div>
   </section>
 
-  <section id="tab-admin" style="display: none;">
+  <section id="tab-admin" data-permission="users.manage" style="display: none;">
     <div class="box">
       <div class="box-header">
         <div class="box-title"><i class="fa-solid fa-users-gear" style="color: var(--primary-light);"></i> المستخدمون والصلاحيات</div>
@@ -443,6 +443,7 @@
       <form id="admin-role-form" onsubmit="saveAdminRole(event)">
         <input type="hidden" id="admin-role-id">
         <div class="form-group"><label for="admin-role-name">اسم الدور</label><input id="admin-role-name" required maxlength="80"></div>
+        <p style="color:var(--text-muted);font-size:.86rem;">تتطلب صلاحيات إدارة البيانات صلاحية عرض بيانات النظام.</p>
         <div id="admin-permission-options" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.7rem;margin:1rem 0;"></div>
         <button class="btn btn-primary" type="submit">حفظ الدور</button>
         <button class="btn btn-outline" type="button" onclick="resetAdminRoleForm()">دور جديد</button>
@@ -451,18 +452,25 @@
     </div>
   </section>
 
+  <section id="tab-access-denied" style="display: none;">
+    <div class="box">
+      <div class="box-title">لا توجد صلاحية لعرض بيانات النظام</div>
+      <p style="margin-top:.6rem;color:var(--text-muted);">اطلب من مدير النظام إضافة صلاحية عرض بيانات النظام إلى دورك.</p>
+    </div>
+  </section>
+
 </div>
 
 <!-- BOTTOM BAR FOR MOBILE -->
 <div class="bottom-bar">
-  <div class="bottom-bar-item active" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> اليومية</div>
-  <div class="bottom-bar-item" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> الحصص</div>
-  <div class="bottom-bar-item" data-permission="courses.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> التوزيع</div>
-  <div class="bottom-bar-item" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> الطلاب</div>
-  <div class="bottom-bar-item" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> المعيدين</div>
-  <div class="bottom-bar-item" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> ورك سبيس</div>
-  <div class="bottom-bar-item" onclick="switchTab('expenses')"><i class="fa-solid fa-receipt"></i> المصروفات</div>
-  <div class="bottom-bar-item" onclick="switchTab('closing')"><i class="fa-solid fa-chart-pie"></i> الإقفال</div>
+  <div class="bottom-bar-item active" data-page-permission="data.view" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> اليومية</div>
+  <div class="bottom-bar-item" data-page-permission="courses.manage,students.manage,attendance.manage,payments.manage" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> الحصص</div>
+  <div class="bottom-bar-item" data-page-permission="courses.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> التوزيع</div>
+  <div class="bottom-bar-item" data-page-permission="students.manage" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> الطلاب</div>
+  <div class="bottom-bar-item" data-page-permission="courses.manage" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> المعيدين</div>
+  <div class="bottom-bar-item" data-page-permission="workspace.manage" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> ورك سبيس</div>
+  <div class="bottom-bar-item" data-page-permission="expenses.manage" onclick="switchTab('expenses')"><i class="fa-solid fa-receipt"></i> المصروفات</div>
+  <div class="bottom-bar-item" data-page-permission="closing.manage" onclick="switchTab('closing')"><i class="fa-solid fa-chart-pie"></i> الإقفال</div>
   <div class="bottom-bar-item" data-permission="users.manage" onclick="switchTab('admin')"><i class="fa-solid fa-user-shield"></i> المستخدمون</div>
 </div>
 
