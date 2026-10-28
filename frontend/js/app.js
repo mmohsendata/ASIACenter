@@ -230,7 +230,8 @@ function applyPermissionsToUI() {
     const hasPagePermission = !pagePermissions.length ||
       (currentPermissions.has('data.view') &&
         pagePermissions.some(permission => currentPermissions.has(permission)));
-    element.style.display = hasElementPermission && hasPagePermission ? '' : 'none';
+    element.hidden = !hasElementPermission || !hasPagePermission;
+    element.style.display = element.hidden ? 'none' : '';
   });
 }
 

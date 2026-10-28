@@ -13,6 +13,7 @@
   --radius: 14px;
 }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+[hidden] { display: none !important; }
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', sans-serif; }
 button, input, select, textarea { max-width: 100%; }
 body {
