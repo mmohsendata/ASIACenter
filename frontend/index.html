@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>آسيا سنتر | ASIA CENTER</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -59,7 +59,7 @@
           <h2 style="font-size: 1.4rem; font-weight: 800;">تصفية دخل وتفاصيل اليوم 📅</h2>
           <p style="opacity: 0.85; font-size: 0.9rem;">حدد التاريخ لعرض كل من حضر، دخل الحصص (50ج)، دفعات الكورسات، ودخل الورك سبيس</p>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="daily-date-controls" style="display: flex; align-items: center; gap: 10px;">
           <input type="date" id="filter-date" class="form-control" style="padding: 0.6rem 1rem; border-radius: 10px; border: none; font-weight: bold; outline: none;" onchange="loadDailyReport()">
           <button class="btn btn-accent" onclick="setTodayDate()"><i class="fa-solid fa-clock"></i> اليوم</button>
         </div>
@@ -120,7 +120,7 @@
         <span class="badge badge-primary" id="daily-students-count">0 طالب حاضر</span>
       </div>
       <div class="table-responsive">
-        <table>
+        <table id="daily-details-table">
           <thead>
             <tr>
               <th>اسم الطالب</th>
@@ -152,7 +152,18 @@
         </div>
       </div>
       <div class="table-responsive">
-        <table>
+        <table id="courses-summary-table">
+          <colgroup>
+            <col style="width: 17%;">
+            <col style="width: 10%;">
+            <col style="width: 8%;">
+            <col style="width: 8%;">
+            <col style="width: 8%;">
+            <col style="width: 10%;">
+            <col style="width: 11%;">
+            <col style="width: 11%;">
+            <col style="width: 17%;">
+          </colgroup>
           <thead>
             <tr>
               <th>المادة</th>
@@ -193,7 +204,7 @@
       </p>
 
       <div class="table-responsive">
-        <table>
+        <table id="course-attendance-table">
           <thead>
             <tr>
               <th>م</th>
@@ -204,8 +215,7 @@
               <th>المتبقي</th>
               <th>تسديد دفعة</th>
               <th>حضر اليوم؟</th>
-              <th>نقداً 50ج؟</th>
-              <th>تحويل 50ج؟</th>
+              <th>طريقة دفع الحصة (50ج)</th>
               <th>تعديل</th>
               <th>إجراءات</th>
             </tr>
@@ -293,7 +303,7 @@
         </div>
       </div>
       <div class="table-responsive">
-        <table>
+        <table id="professors-table">
           <thead>
             <tr>
               <th>المادة</th>
@@ -325,7 +335,7 @@
         </div>
       </div>
       <div class="table-responsive">
-        <table>
+        <table id="workspace-table">
           <thead>
             <tr>
               <th>التاريخ</th>
@@ -378,7 +388,7 @@
         <span class="badge badge-danger" id="expenses-total">إجمالي المصروفات: 0 ج.م</span>
       </div>
       <div class="table-responsive">
-        <table>
+        <table id="expenses-table">
           <thead>
             <tr>
               <th>التاريخ</th>
@@ -417,7 +427,7 @@
         <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i> إضافة مالك</button>
       </form>
       <div class="table-responsive" style="margin-top: 1.2rem;">
-        <table>
+        <table id="owners-table">
           <thead><tr><th>المالك</th><th>نسبة الربح</th><th>إجراءات</th></tr></thead>
           <tbody id="owners-table-body"></tbody>
         </table>
@@ -469,7 +479,7 @@
         <button class="btn btn-outline" type="button" onclick="resetAdminUserForm()">إلغاء التعديل</button>
       </form>
       <div class="table-responsive" style="margin-top: 1rem;">
-        <table><thead><tr><th>المستخدم</th><th>الدور</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="admin-users-body"></tbody></table>
+        <table id="admin-users-table"><thead><tr><th>المستخدم</th><th>الدور</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="admin-users-body"></tbody></table>
       </div>
     </div>
     <div class="box">

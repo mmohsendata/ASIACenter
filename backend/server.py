@@ -301,6 +301,33 @@ def default_data():
     }
 
 
+def migrate_legacy_session_payments(data):
+    if not isinstance(data, dict):
+        return False
+    courses = data.get("courses", [])
+    if not isinstance(courses, list):
+        return False
+    changed = False
+    for course in courses:
+        if not isinstance(course, dict):
+            continue
+        students = course.get("students", [])
+        if not isinstance(students, list):
+            continue
+        for student in students:
+            if not isinstance(student, dict):
+                continue
+            sessions = student.get("sessions", [])
+            if not isinstance(sessions, list):
+                continue
+            for session in sessions:
+                if (isinstance(session, dict) and session.get("paid50") is True and
+                        "paid50Method" not in session):
+                    session["paid50Method"] = "cash"
+                    changed = True
+    return changed
+
+
 def valid_user_store(store):
     if not isinstance(store, dict) or not isinstance(store.get("users"), dict) or not isinstance(store.get("roles"), list):
         return False
@@ -441,6 +468,11 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(FRONTEND), **kwargs)
 
+    def end_headers(self):
+        if self.path.split("?", 1)[0].lower().endswith((".html", ".js", ".css")):
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
+        super().end_headers()
+
     def log_message(self, format, *args):
         print("[%s] %s" % (self.log_date_time_string(), format % args))
 
@@ -504,23 +536,19 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/data":
             if self._require_permission("data.view") is None:
                 return
-            data = read_json(DATA_FILE, {
-                "courses": [],
-                "workspace": [],
-                "dailyPayments": [],
-                "expenses": [],
-                "owners": [],
-                "closings": [],
-            })
-            data.setdefault("courses", [])
-            data.setdefault("allocations", [])
-            data.setdefault("rooms", [])
-            data.setdefault("roomColors", {})
-            data.setdefault("workspace", [])
-            data.setdefault("dailyPayments", [])
-            data.setdefault("expenses", [])
-            data.setdefault("owners", [])
-            data.setdefault("closings", [])
+            with DATA_LOCK:
+                data = read_json(DATA_FILE, default_data())
+                data.setdefault("courses", [])
+                data.setdefault("allocations", [])
+                data.setdefault("rooms", [])
+                data.setdefault("roomColors", {})
+                data.setdefault("workspace", [])
+                data.setdefault("dailyPayments", [])
+                data.setdefault("expenses", [])
+                data.setdefault("owners", [])
+                data.setdefault("closings", [])
+                if migrate_legacy_session_payments(data):
+                    write_json(DATA_FILE, data)
             self._send_json(data)
             return
         if path == "/api/data/export":

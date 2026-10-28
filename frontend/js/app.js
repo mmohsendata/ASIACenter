@@ -834,7 +834,9 @@ function loadDailyReport() {
               name: s.name,
               phone: s.phone || '-',
               type: c.name,
-              status: sess.paid50 ? 'حضر ودفع 50ج' : 'حاضر فقط',
+              status: sess.paid50
+                ? `حضر ودفع 50ج ${sess.paid50Method === 'transfer' ? 'بالتحويل' : 'نقداً'}`
+                : 'حاضر فقط',
               amount: paid50
             });
           }
@@ -1007,7 +1009,7 @@ function renderCourseStudents(cIdx) {
   const currentDate = document.getElementById('session-date-input').value;
 
   if (course.students.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; padding: 2rem;">لا يوجد طلاب مضافين حتى الآن، اضغط إضافة طالب للمادة</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding: 2rem;">لا يوجد طلاب مضافين حتى الآن، اضغط إضافة طالب للمادة</td></tr>';
     return;
   }
 
@@ -1040,13 +1042,9 @@ function renderCourseStudents(cIdx) {
           </div>
         </td>
         <td style="text-align: center;">
-          <div class="check-toggle ${paid50Method === 'cash' ? 'checked-pay' : ''}" title="تسجيل 50 ج.م نقداً" onclick="handleSessionPay50Click(${sIdx}, 'cash')">
-            <i class="fa-solid fa-coins"></i>
-          </div>
-        </td>
-        <td style="text-align: center;">
-          <div class="check-toggle ${paid50Method === 'transfer' ? 'checked-pay' : ''}" title="تسجيل 50 ج.م بالتحويل" onclick="handleSessionPay50Click(${sIdx}, 'transfer')">
-            <i class="fa-solid fa-building-columns"></i>
+          <div class="session-payment-options" role="group" aria-label="طريقة دفع رسوم الحصة">
+            <button type="button" class="session-payment-option cash ${paid50Method === 'cash' ? 'selected' : ''}" aria-pressed="${paid50Method === 'cash'}" onclick="handleSessionPay50Click(${sIdx}, 'cash')">نقداً</button>
+            <button type="button" class="session-payment-option transfer ${paid50Method === 'transfer' ? 'selected' : ''}" aria-pressed="${paid50Method === 'transfer'}" onclick="handleSessionPay50Click(${sIdx}, 'transfer')">تحويل</button>
           </div>
         </td>
         <td>
@@ -1318,7 +1316,7 @@ function renderStudentsDirectory() {
           </div>
         </div>
         <div class="table-responsive">
-          <table style="font-size: 0.85rem;">
+          <table class="student-course-table" style="font-size: 0.85rem;">
             <thead>
               <tr style="background: #f1f5f9;">
                 <th>المادة المسجلة</th>
