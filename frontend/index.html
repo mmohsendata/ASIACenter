@@ -465,34 +465,49 @@
   </section>
 
   <section id="tab-admin" data-page-permission="users.view" style="display: none;">
-    <div class="box">
+    <div class="box admin-panel">
       <div class="box-header">
         <div class="box-title"><i class="fa-solid fa-users-gear" style="color: var(--primary-light);"></i> المستخدمون والصلاحيات</div>
       </div>
-      <form id="admin-user-form" onsubmit="saveAdminUser(event)" data-permission="users.edit" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; align-items: end;">
+      <form id="admin-user-form" class="admin-user-form" onsubmit="saveAdminUser(event)" data-permission="users.edit">
         <input type="hidden" id="admin-user-original">
-        <div class="form-group" style="margin: 0;"><label for="admin-user-name">اسم المستخدم</label><input id="admin-user-name" required minlength="3" maxlength="40"></div>
-        <div class="form-group" style="margin: 0;"><label for="admin-user-password">كلمة المرور (12 حرفًا على الأقل)</label><input id="admin-user-password" type="password" minlength="12" autocomplete="new-password"></div>
-        <div class="form-group" style="margin: 0;"><label for="admin-user-role">الدور</label><select id="admin-user-role" required></select></div>
-        <label style="display:flex;gap:.5rem;align-items:center;"><input type="checkbox" id="admin-user-active" checked> حساب نشط</label>
-        <button class="btn btn-primary" type="submit">حفظ المستخدم</button>
-        <button class="btn btn-outline" type="button" onclick="resetAdminUserForm()">إلغاء التعديل</button>
+        <div class="form-group admin-field"><label for="admin-user-name">اسم المستخدم</label><input id="admin-user-name" required minlength="3" maxlength="40" autocomplete="username"></div>
+        <div class="form-group admin-field"><label for="admin-user-password">كلمة المرور</label><input id="admin-user-password" type="password" minlength="12" autocomplete="new-password" aria-describedby="admin-user-password-help" required><small id="admin-user-password-help">12 حرفًا على الأقل عند إنشاء مستخدم. اتركها فارغة للإبقاء على كلمة المرور.</small></div>
+        <div class="form-group admin-field"><label for="admin-user-role">الدور</label><select id="admin-user-role" required></select></div>
+        <label class="admin-active-option" for="admin-user-active"><input type="checkbox" id="admin-user-active" checked> حساب نشط</label>
+        <div class="admin-form-actions">
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> حفظ المستخدم</button>
+          <button class="btn btn-outline" type="button" onclick="resetAdminUserForm()">مستخدم جديد / إلغاء</button>
+        </div>
       </form>
-      <div class="table-responsive" style="margin-top: 1rem;">
+      <div class="admin-table-heading"><h3>قائمة المستخدمين</h3></div>
+      <div class="table-responsive admin-table">
         <table id="admin-users-table"><thead><tr><th>المستخدم</th><th>الدور</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="admin-users-body"></tbody></table>
       </div>
     </div>
-    <div class="box">
-      <div class="box-header"><div class="box-title"><i class="fa-solid fa-shield-halved"></i> الأدوار والصلاحيات</div></div>
-      <form id="admin-role-form" onsubmit="saveAdminRole(event)" data-permission="users.edit">
+    <div class="box admin-panel admin-roles-panel">
+      <div class="box-header">
+        <div>
+          <div class="box-title"><i class="fa-solid fa-shield-halved"></i> الأدوار والصلاحيات</div>
+          <p class="admin-panel-hint">حدد مستوى الوصول لكل وحدة. القراءة تعرض الصفحة فقط، والتعديل يسمح بالتغييرات، والحذف يضيف صلاحية الحذف.</p>
+        </div>
+      </div>
+      <form id="admin-role-form" class="admin-role-form" onsubmit="saveAdminRole(event)" data-permission="users.edit">
         <input type="hidden" id="admin-role-id">
-        <div class="form-group"><label for="admin-role-name">اسم الدور</label><input id="admin-role-name" required maxlength="80"></div>
-        <p style="color:var(--text-muted);font-size:.86rem;">تتطلب صلاحيات إدارة البيانات صلاحية عرض بيانات النظام.</p>
-        <div id="admin-permission-options" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.7rem;margin:1rem 0;"></div>
-        <button class="btn btn-primary" type="submit">حفظ الدور</button>
-        <button class="btn btn-outline" type="button" onclick="resetAdminRoleForm()">دور جديد</button>
+        <div class="form-group admin-role-name"><label for="admin-role-name">اسم الدور</label><input id="admin-role-name" required maxlength="80" placeholder="مثال: مشرف المواد"></div>
+        <div class="admin-data-access">
+          <label for="role-data-view"><span><strong>عرض البيانات اليومية</strong><small>يتيح لوحة الدخل اليومي والبيانات العامة.</small></span><input type="checkbox" id="role-data-view"></label>
+          <p>اختيار مستوى لأي وحدة بيانات يمنح تلقائيًا حق عرض بيانات النظام.</p>
+        </div>
+        <div class="admin-permissions-heading"><h3>مستوى الصلاحيات حسب الوحدة</h3><span>اختر مستوى لكل وحدة</span></div>
+        <div id="admin-permission-options" class="admin-permission-options"></div>
+        <div class="admin-form-actions">
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> حفظ الدور</button>
+          <button class="btn btn-outline" type="button" onclick="resetAdminRoleForm()">دور جديد / إلغاء</button>
+        </div>
       </form>
-      <div id="admin-roles-list" style="margin-top:1rem;"></div>
+      <div class="admin-table-heading"><h3>الأدوار الحالية</h3></div>
+      <div id="admin-roles-list" class="admin-roles-list"></div>
     </div>
   </section>
 

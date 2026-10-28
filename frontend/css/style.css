@@ -143,6 +143,142 @@ th, td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); font-siz
 th { background: #f8fafc; font-weight: 700; color: var(--text-muted); }
 tr:hover { background: #f8fafc; }
 
+/* User management */
+.admin-panel { min-width: 0; }
+.admin-panel-hint {
+  margin-top: .35rem;
+  color: var(--text-muted);
+  font-size: .88rem;
+  line-height: 1.65;
+}
+.admin-user-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.admin-field { min-width: 0; margin: 0; }
+.admin-field small, .admin-data-access small {
+  display: block;
+  margin-top: .35rem;
+  color: var(--text-muted);
+  font-size: .76rem;
+  line-height: 1.5;
+}
+.admin-active-option {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  min-height: 44px;
+  font-weight: 700;
+}
+.admin-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6rem;
+}
+.admin-user-form > .admin-form-actions { grid-column: 1 / -1; }
+.admin-table-heading, .admin-permissions-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem;
+  margin: 1.35rem 0 .65rem;
+}
+.admin-table-heading h3, .admin-permissions-heading h3 {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+}
+.admin-table-heading > span, .admin-permissions-heading > span {
+  color: var(--text-muted);
+  font-size: .8rem;
+}
+.admin-table { border: 1px solid var(--border); border-radius: 10px; }
+.admin-table td:last-child { white-space: nowrap; }
+.admin-table td:last-child .btn { margin: .12rem; }
+.admin-role-form {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.admin-role-name { max-width: 440px; }
+.admin-role-name { margin-bottom: 1rem; }
+.admin-data-access {
+  padding: .8rem .9rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+.admin-data-access label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+}
+.admin-data-access label > span { min-width: 0; }
+.admin-data-access p {
+  margin-top: .55rem;
+  color: #475569;
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.admin-permission-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+  margin: .85rem 0 1rem;
+}
+.admin-permission-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, .9fr);
+  align-items: center;
+  gap: .8rem;
+  min-width: 0;
+  padding: .75rem .85rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+}
+.admin-permission-card > span {
+  min-width: 0;
+  font-size: .88rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.admin-permission-card select { width: 100%; min-width: 0; }
+.admin-roles-list { display: grid; gap: .6rem; }
+.admin-role-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  min-width: 0;
+  padding: .8rem .9rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+}
+.admin-role-info { display: grid; gap: .2rem; min-width: 0; }
+.admin-role-info strong { overflow-wrap: anywhere; }
+.admin-role-info span { color: var(--text-muted); font-size: .8rem; }
+.admin-role-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+.admin-empty-state {
+  padding: 1rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 /* Badges */
 .badge {
   padding: 0.25rem 0.65rem; border-radius: 8px; font-size: 0.78rem; font-weight: 700;
@@ -383,6 +519,16 @@ tr:hover { background: #f8fafc; }
   #expense-form, #owner-form, #admin-user-form {
     grid-template-columns: minmax(0, 1fr) !important;
   }
+  .admin-permission-options { grid-template-columns: minmax(0, 1fr); }
+  .admin-user-form { grid-template-columns: minmax(0, 1fr); }
+  .admin-user-form > .admin-form-actions { grid-column: auto; }
+  .admin-form-actions { align-items: stretch; }
+  .admin-form-actions .btn { flex: 1 1 100%; justify-content: center; }
+  .admin-permission-card { grid-template-columns: minmax(0, 1fr) minmax(125px, .85fr); }
+  .admin-table { border: 0; border-radius: 0; }
+  .admin-role-item { align-items: stretch; }
+  .admin-role-actions { width: 100%; }
+  .admin-role-actions .btn { flex: 1 1 auto; justify-content: center; }
   .allocation-matrix { grid-template-columns: repeat(7, minmax(155px, 1fr)); }
   .modal-overlay { padding: .75rem; }
   .modal { padding: 1rem; }

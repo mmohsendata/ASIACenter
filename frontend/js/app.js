@@ -319,21 +319,22 @@ async function loadAdminPage() {
   const rolesData = await rolesResponse.json();
   const roleNames = new Map(rolesData.roles.map(role => [role.id, role.name]));
   const roleSelect = document.getElementById('admin-user-role');
-  roleSelect.innerHTML = rolesData.roles.map(role => `<option value="${escapeHtml(role.id)}">${escapeHtml(role.name)}</option>`).join('');
+  roleSelect.innerHTML = rolesData.roles.length
+    ? rolesData.roles.map(role => `<option value="${escapeHtml(role.id)}">${escapeHtml(role.name)}</option>`).join('')
+    : '<option value="">أنشئ دورًا أولًا</option>';
+  roleSelect.disabled = !rolesData.roles.length;
   document.getElementById('admin-users-body').innerHTML = usersData.users.map(user => `
     <tr>
-      <td>${escapeHtml(user.username)}</td><td>${escapeHtml(roleNames.get(user.roleId) || 'غير معروف')}</td>
-      <td>${user.active ? 'نشط' : 'موقوف'}</td>
-      <td>${currentPermissions.has('users.edit') ? `<button class="btn btn-outline" onclick="editAdminUser('${escapeHtml(user.username)}','${escapeHtml(user.roleId)}',${user.active})">تعديل</button>` : ''}
-      ${currentPermissions.has('users.delete') ? `<button class="btn btn-danger" onclick="deleteAdminUser('${escapeHtml(user.username)}')">حذف</button>` : ''}</td>
+      <td><strong>${escapeHtml(user.username)}</strong></td>
+      <td>${escapeHtml(roleNames.get(user.roleId) || 'غير معروف')}</td>
+      <td><span class="badge ${user.active ? 'badge-success' : 'badge-danger'}">${user.active ? 'نشط' : 'موقوف'}</span></td>
+      <td>${currentPermissions.has('users.edit') ? `<button class="btn btn-outline" onclick="editAdminUser('${escapeHtml(user.username)}','${escapeHtml(user.roleId)}',${user.active})"><i class="fa-solid fa-pen"></i> تعديل</button>` : ''}
+      ${currentPermissions.has('users.delete') ? `<button class="btn btn-danger" onclick="deleteAdminUser('${escapeHtml(user.username)}')"><i class="fa-solid fa-trash"></i> حذف</button>` : ''}</td>
     </tr>`).join('');
 
   document.getElementById('admin-permission-options').innerHTML = `
-    <label style="display:flex;gap:.5rem;align-items:center;">
-      <input type="checkbox" id="role-data-view"> عرض البيانات اليومية
-    </label>
     ${ROLE_MODULES.map(module => `
-      <label style="display:flex;gap:.5rem;align-items:center;justify-content:space-between;">
+      <label class="admin-permission-card">
         <span>${escapeHtml(module.label)}</span>
         <select data-role-module="${module.key}" aria-label="مستوى صلاحية ${escapeHtml(module.label)}">
           <option value="none">بدون صلاحية</option>
@@ -342,12 +343,25 @@ async function loadAdminPage() {
           <option value="delete">قراءة وتعديل وحذف</option>
         </select>
       </label>`).join('')}`;
+  const assignedUsers = new Map();
+  usersData.users.forEach(user => assignedUsers.set(user.roleId, (assignedUsers.get(user.roleId) || 0) + 1));
   document.getElementById('admin-roles-list').innerHTML = rolesData.roles.map(role => `
-    <div style="display:flex;gap:.7rem;align-items:center;margin:.5rem 0;">
-      <strong>${escapeHtml(role.name)}</strong><span>${role.permissions.length} صلاحية</span>
-      ${currentPermissions.has('users.edit') ? `<button class="btn btn-outline" onclick="editAdminRole('${escapeHtml(role.id)}')">تعديل</button>` : ''}
-      ${currentPermissions.has('users.delete') ? `<button class="btn btn-danger" onclick="deleteAdminRole('${escapeHtml(role.id)}')">حذف</button>` : ''}
+    <div class="admin-role-item">
+      <div class="admin-role-info">
+        <strong>${escapeHtml(role.name)}</strong>
+        <span>${assignedUsers.get(role.id) || 0} مستخدم · ${ROLE_MODULES.filter(module => roleModuleLevel(role.permissions, module.key) !== 'none').length} وحدات مفعّلة</span>
+      </div>
+      <div class="admin-role-actions">
+        ${currentPermissions.has('users.edit') ? `<button class="btn btn-outline" onclick="editAdminRole('${escapeHtml(role.id)}')"><i class="fa-solid fa-pen"></i> تعديل</button>` : ''}
+        ${currentPermissions.has('users.delete') ? `<button class="btn btn-danger" onclick="deleteAdminRole('${escapeHtml(role.id)}')"><i class="fa-solid fa-trash"></i> حذف</button>` : ''}
+      </div>
     </div>`).join('');
+  if (!rolesData.roles.length) {
+    document.getElementById('admin-roles-list').innerHTML = '<p class="admin-empty-state">لا توجد أدوار بعد. أنشئ دورًا لتتمكن من إضافة المستخدمين.</p>';
+  }
+  if (!usersData.users.length) {
+    document.getElementById('admin-users-body').innerHTML = '<tr><td class="admin-empty-state" colspan="4">لا يوجد مستخدمون إضافيون مسجلون.</td></tr>';
+  }
   applyPermissionsToUI();
 }
 
@@ -378,6 +392,7 @@ function resetAdminUserForm() {
   document.getElementById('admin-user-original').value = '';
   document.getElementById('admin-user-active').checked = true;
   document.getElementById('admin-user-name').disabled = false;
+  document.getElementById('admin-user-password').required = true;
 }
 
 function editAdminUser(username, roleId, active) {
@@ -388,6 +403,7 @@ function editAdminUser(username, roleId, active) {
   document.getElementById('admin-user-role').value = roleId;
   document.getElementById('admin-user-active').checked = active;
   document.getElementById('admin-user-password').value = '';
+  document.getElementById('admin-user-password').required = false;
 }
 
 async function saveAdminUser(event) {
