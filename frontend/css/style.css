@@ -129,7 +129,12 @@ header {
 }
 .table-responsive > table { min-width: 600px; }
 table { width: 100%; border-collapse: collapse; text-align: right; }
-#courses-summary-table { min-width: 1080px; table-layout: fixed; }
+#courses-summary-table {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+}
+#courses-summary-table th { white-space: nowrap; }
 #courses-summary-table th:nth-child(7), #courses-summary-table td:nth-child(7),
 #courses-summary-table th:nth-child(8), #courses-summary-table td:nth-child(8) { text-align: center; }
 #course-attendance-table { min-width: 1080px; }
