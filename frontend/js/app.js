@@ -7,6 +7,7 @@ let selectedAllocationRooms = null;
 const PERMISSION_LABELS = {
   "data.view": "عرض بيانات النظام",
   "courses.manage": "إدارة المواد والكورسات",
+  "allocations.manage": "إدارة توزيع القاعات والجداول",
   "students.manage": "إدارة بيانات الطلاب",
   "attendance.manage": "إدارة الحضور",
   "payments.manage": "إدارة المدفوعات",
@@ -20,7 +21,7 @@ const PERMISSION_LABELS = {
 const TAB_PERMISSIONS = {
   daily: "data.view",
   courses: ["courses.manage", "students.manage", "attendance.manage", "payments.manage"],
-  allocation: "courses.manage",
+  allocation: ["courses.manage", "allocations.manage"],
   students: "students.manage",
   professors: "courses.manage",
   workspace: "workspace.manage",
@@ -36,6 +37,10 @@ const DATA_MANAGEMENT_PERMISSIONS = new Set([
 function requirePermission(permission, callback) {
   if (!hasPermission(permission)) return;
   callback();
+}
+
+function requireAllocationPermission(callback) {
+  requirePermission('allocations.manage', callback);
 }
 
 function hasPermission(permission) {
@@ -90,10 +95,16 @@ function openBackupModal() {
 async function saveDB() {
   let accessDenied = false;
   try {
-    const response = await fetch('/api/data', {
+    const allocationOnly = !currentPermissions.has('data.view') &&
+      currentPermissions.has('allocations.manage');
+    const url = allocationOnly ? '/api/allocation-data' : '/api/data';
+    const payload = allocationOnly
+      ? { allocations: db.allocations, rooms: db.rooms, roomColors: db.roomColors }
+      : db;
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(db)
+      body: JSON.stringify(payload)
     });
     const result = await response.json();
     if (!response.ok) {
@@ -116,10 +127,21 @@ async function initDB() {
   }
   document.getElementById('modal-auth').classList.remove('open');
   currentPermissions = new Set(session.permissions || []);
+  if (currentPermissions.has('courses.manage')) currentPermissions.add('allocations.manage');
   document.getElementById('current-user-label').textContent = `${session.username} (${session.role})`;
   applyPermissionsToUI();
   if (!currentPermissions.has('data.view')) {
-    if (currentPermissions.has('users.manage')) switchTab('admin');
+    if (currentPermissions.has('allocations.manage')) {
+      const allocationResponse = await fetch('/api/allocation-data');
+      if (!allocationResponse.ok) throw new Error('تعذر تحميل بيانات توزيع القاعات والجداول.');
+      db = await allocationResponse.json();
+      if (!Array.isArray(db.courses)) db.courses = [];
+      if (!Array.isArray(db.allocations)) db.allocations = [];
+      if (!Array.isArray(db.rooms)) db.rooms = [];
+      if (!db.roomColors || typeof db.roomColors !== 'object' || Array.isArray(db.roomColors)) db.roomColors = {};
+      if (ensureAllocationRoomColors()) await saveDB();
+      switchTab('allocation');
+    } else if (currentPermissions.has('users.manage')) switchTab('admin');
     else switchTab('access-denied');
     return true;
   }
@@ -165,7 +187,7 @@ async function initDB() {
   if (!db.allocations) db.allocations = [];
   if (!db.rooms) db.rooms = [];
   if (!db.roomColors || typeof db.roomColors !== 'object' || Array.isArray(db.roomColors)) db.roomColors = {};
-  if (ensureAllocationRoomColors() && currentPermissions.has('courses.manage')) saveDB();
+  if (ensureAllocationRoomColors() && currentPermissions.has('allocations.manage')) saveDB();
 
   return true;
 }
@@ -224,11 +246,14 @@ async function logoutUser() {
 
 function applyPermissionsToUI() {
   document.querySelectorAll('[data-permission], [data-page-permission]').forEach(element => {
-    const hasElementPermission = !element.dataset.permission ||
-      currentPermissions.has(element.dataset.permission);
+    const elementPermissions = element.dataset.permission?.split(',') || [];
+    const hasElementPermission = !elementPermissions.length ||
+      elementPermissions.some(permission => currentPermissions.has(permission));
     const pagePermissions = element.dataset.pagePermission?.split(',') || [];
     const hasPagePermission = !pagePermissions.length ||
-      (currentPermissions.has('data.view') &&
+      ((currentPermissions.has('data.view') ||
+        (pagePermissions.includes('allocations.manage') &&
+          currentPermissions.has('allocations.manage'))) &&
         pagePermissions.some(permission => currentPermissions.has(permission)));
     element.hidden = !hasElementPermission || !hasPagePermission;
     element.style.display = element.hidden ? 'none' : '';
@@ -258,7 +283,8 @@ async function loadAdminPage() {
     </tr>`).join('');
 
   const labels = {
-    "data.view": "عرض بيانات النظام", "courses.manage": "إدارة الكورسات", "students.manage": "إدارة الطلاب",
+    "data.view": "عرض بيانات النظام", "courses.manage": "إدارة الكورسات",
+    "allocations.manage": "إدارة توزيع القاعات والجداول", "students.manage": "إدارة الطلاب",
     "attendance.manage": "إدارة الحضور", "payments.manage": "إدارة المدفوعات", "workspace.manage": "إدارة الورك سبيس",
     "expenses.manage": "إدارة المصروفات", "closing.manage": "إدارة الأرباح والإقفالات",
     "backups.manage": "النسخ الاحتياطية", "users.manage": "المستخدمون والأدوار"
@@ -402,7 +428,7 @@ let currentCourseIndex = null;
 function switchTab(tabId) {
   const requiredPermission = TAB_PERMISSIONS[tabId];
   if (requiredPermission) {
-    if (tabId !== 'admin' && !currentPermissions.has('data.view')) return;
+    if (tabId !== 'admin' && tabId !== 'allocation' && !currentPermissions.has('data.view')) return;
     const hasTabPermission = Array.isArray(requiredPermission)
       ? requiredPermission.some(permission => currentPermissions.has(permission))
       : currentPermissions.has(requiredPermission);
@@ -566,7 +592,7 @@ function renderAllocationMatrix() {
       const roster = students.length
         ? `<ul class="allocation-students">${students.map(student => `<li>${escapeHtml(student.name || '')}</li>`).join('')}</ul>`
         : '<div class="allocation-students">لا يوجد طلاب مسجلون</div>';
-      const actions = currentPermissions.has('courses.manage') ? `
+      const actions = currentPermissions.has('allocations.manage') ? `
         <div style="display:flex;gap:.4rem;margin-top:.55rem;">
           <button class="btn btn-outline" style="padding:.2rem .45rem;font-size:.75rem;" onclick="editAllocation(${index})" title="تعديل التخصيص"><i class="fa-solid fa-pen"></i></button>
           <button class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;" onclick="deleteAllocation(${index})" title="حذف التخصيص"><i class="fa-solid fa-trash"></i></button>
@@ -593,14 +619,14 @@ function renderAllocationRooms() {
     ? db.rooms.map((room, index) => `
       <span class="allocation-room-chip" style="--room-color:${roomColor(room)}">
         <span class="allocation-room-name">${escapeHtml(room)}</span>
-        ${currentPermissions.has('courses.manage') ? `<button type="button" class="btn btn-danger" style="padding:.15rem .4rem;font-size:.72rem;" onclick="deleteAllocationRoom(${index})" aria-label="حذف ${escapeHtml(room)}"><i class="fa-solid fa-xmark"></i></button>` : ''}
+        ${currentPermissions.has('allocations.manage') ? `<button type="button" class="btn btn-danger" style="padding:.15rem .4rem;font-size:.72rem;" onclick="deleteAllocationRoom(${index})" aria-label="حذف ${escapeHtml(room)}"><i class="fa-solid fa-xmark"></i></button>` : ''}
       </span>`).join('')
     : '<span style="color:var(--text-muted);">لم تتم إضافة قاعات بعد.</span>';
 }
 
 function addAllocationRoom(event) {
   event.preventDefault();
-  requirePermission('courses.manage', () => {
+  requireAllocationPermission(() => {
     const input = document.getElementById('allocation-room-name');
     const room = input.value.trim();
     if (!room) return;
@@ -624,7 +650,7 @@ function deleteAllocationRoom(index) {
     alert('لا يمكن حذف القاعة قبل نقل أو حذف التخصيصات المرتبطة بها.');
     return;
   }
-  requirePermission('courses.manage', () => {
+  requireAllocationPermission(() => {
     if (!confirm(`حذف القاعة "${room}"؟`)) return;
     db.rooms.splice(index, 1);
     delete db.roomColors[room];
@@ -635,8 +661,8 @@ function deleteAllocationRoom(index) {
 }
 
 function openAllocationModal(id = '') {
-  if (!currentPermissions.has('courses.manage')) {
-    alert(`ليس لديك صلاحية ${PERMISSION_LABELS['courses.manage']}.`);
+  if (!currentPermissions.has('allocations.manage')) {
+    alert(`ليس لديك صلاحية ${PERMISSION_LABELS['allocations.manage']}.`);
     return;
   }
   if (!db.courses.length) {
@@ -734,7 +760,7 @@ function saveAllocation() {
     return;
   }
 
-  requirePermission('courses.manage', () => {
+  requireAllocationPermission(() => {
     const index = db.allocations.findIndex(item => item.id === id);
     if (index >= 0) db.allocations[index] = slot;
     else db.allocations.push(slot);
@@ -748,7 +774,7 @@ function saveAllocation() {
 function deleteAllocation(index) {
   const slot = db.allocations[index];
   if (!slot) return;
-  requirePermission('courses.manage', () => {
+  requireAllocationPermission(() => {
     if (!confirm(`حذف تخصيص "${slot.courseName}" يوم ${ALLOCATION_DAYS[slot.day]}؟`)) return;
     db.allocations.splice(index, 1);
     saveDB();

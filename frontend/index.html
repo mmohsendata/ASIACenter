@@ -40,7 +40,7 @@
 <div class="nav-bar">
   <div class="nav-item active" data-page-permission="data.view" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> تصفية دخل اليوم</div>
   <div class="nav-item" data-page-permission="courses.manage,students.manage,attendance.manage,payments.manage" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> إدارة المواد والحصص</div>
-  <div class="nav-item" data-page-permission="courses.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> توزيع القاعات والجداول</div>
+  <div class="nav-item" data-page-permission="courses.manage,allocations.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> توزيع القاعات والجداول</div>
   <div class="nav-item" data-page-permission="students.manage" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> بحث وشيت الطلاب</div>
   <div class="nav-item" data-page-permission="courses.manage" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> حسابات المعيدين ونسبة السنتر</div>
   <div class="nav-item" data-page-permission="workspace.manage" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> شيت الورك سبيس</div>
@@ -228,14 +228,14 @@
     </div>
   </section>
 
-  <section id="tab-allocation" data-page-permission="courses.manage" style="display: none;">
+  <section id="tab-allocation" data-page-permission="courses.manage,allocations.manage" style="display: none;">
     <div class="box">
       <div class="box-header">
         <div>
           <div class="box-title"><i class="fa-solid fa-table-cells" style="color: var(--primary-light);"></i> توزيع المواد على القاعات والجدول الأسبوعي</div>
           <p style="font-size:.88rem;color:var(--text-muted);margin-top:.35rem;">عرض أسبوعي من السبت إلى الجمعة. يمكن تخصيص أكثر من موعد للمادة وتحديد فترة الأسابيع.</p>
         </div>
-        <button class="btn btn-primary" data-permission="courses.manage" onclick="openAllocationModal()"><i class="fa-solid fa-plus"></i> إضافة تخصيص</button>
+        <button class="btn btn-primary" data-permission="courses.manage,allocations.manage" onclick="openAllocationModal()"><i class="fa-solid fa-plus"></i> إضافة تخصيص</button>
       </div>
       <div id="allocation-room-filters" class="allocation-room-filters" aria-label="تصفية الجدول حسب القاعة"></div>
       <div id="allocation-matrix" class="allocation-matrix"></div>
@@ -248,7 +248,7 @@
           <p style="font-size:.88rem;color:var(--text-muted);margin-top:.35rem;">أضف أسماء القاعات لاستخدامها في التخصيصات. لا يمكن حذف قاعة مرتبطة بموعد.</p>
         </div>
       </div>
-      <form onsubmit="addAllocationRoom(event)" data-permission="courses.manage" style="display:flex;gap:.7rem;flex-wrap:wrap;align-items:end;">
+      <form onsubmit="addAllocationRoom(event)" data-permission="courses.manage,allocations.manage" style="display:flex;gap:.7rem;flex-wrap:wrap;align-items:end;">
         <div class="form-group" style="margin:0;min-width:220px;">
           <label for="allocation-room-name">اسم القاعة</label>
           <input id="allocation-room-name" maxlength="80" required placeholder="مثال: القاعة 1">
@@ -509,7 +509,7 @@
 <div class="bottom-bar">
   <div class="bottom-bar-item active" data-page-permission="data.view" onclick="switchTab('daily')"><i class="fa-solid fa-calendar-day"></i> اليومية</div>
   <div class="bottom-bar-item" data-page-permission="courses.manage,students.manage,attendance.manage,payments.manage" onclick="switchTab('courses')"><i class="fa-solid fa-book-open"></i> الحصص</div>
-  <div class="bottom-bar-item" data-page-permission="courses.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> التوزيع</div>
+  <div class="bottom-bar-item" data-page-permission="courses.manage,allocations.manage" onclick="switchTab('allocation')"><i class="fa-solid fa-table-cells"></i> التوزيع</div>
   <div class="bottom-bar-item" data-page-permission="students.manage" onclick="switchTab('students')"><i class="fa-solid fa-users"></i> الطلاب</div>
   <div class="bottom-bar-item" data-page-permission="courses.manage" onclick="switchTab('professors')"><i class="fa-solid fa-calculator"></i> المعيدين</div>
   <div class="bottom-bar-item" data-page-permission="workspace.manage" onclick="switchTab('workspace')"><i class="fa-solid fa-laptop-code"></i> ورك سبيس</div>
@@ -914,6 +914,6 @@
     </div>
   </div>
 </div>
-<script src="/js/app.js?v=role-permissions-20261028"></script>
+<script src="/js/app.js?v=allocation-role-20261028"></script>
 </body>
 </html>

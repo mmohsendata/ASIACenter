@@ -37,6 +37,7 @@ PASSWORD_ITERATIONS = 310_000
 PERMISSIONS = {
     "data.view",
     "courses.manage",
+    "allocations.manage",
     "students.manage",
     "attendance.manage",
     "payments.manage",
@@ -91,7 +92,10 @@ def verify_password(password, stored):
 
 def role_permissions(store, user):
     role = next((item for item in store["roles"] if item["id"] == user["roleId"]), None)
-    return set(role["permissions"]) if role else set()
+    permissions = set(role["permissions"]) if role else set()
+    if "courses.manage" in permissions:
+        permissions.add("allocations.manage")
+    return permissions
 
 
 def session_user(handler):
@@ -116,9 +120,9 @@ def data_change_permissions(old, new):
     required = set()
 
     for field, permission in (
-        ("allocations", "courses.manage"),
-        ("rooms", "courses.manage"),
-        ("roomColors", "courses.manage"),
+        ("allocations", "allocations.manage"),
+        ("rooms", "allocations.manage"),
+        ("roomColors", "allocations.manage"),
         ("dailyPayments", "payments.manage"),
         ("workspace", "workspace.manage"),
         ("expenses", "expenses.manage"),
@@ -551,6 +555,38 @@ class Handler(SimpleHTTPRequestHandler):
                     write_json(DATA_FILE, data)
             self._send_json(data)
             return
+        if path == "/api/allocation-data":
+            identity = self._require_permission("allocations.manage")
+            if identity is None:
+                return
+            with DATA_LOCK:
+                data = read_json(DATA_FILE, default_data())
+                for field, fallback in (
+                    ("courses", []), ("allocations", []), ("rooms", []), ("roomColors", {}),
+                    ("workspace", []), ("dailyPayments", []), ("expenses", []),
+                    ("owners", []), ("closings", []),
+                ):
+                    data.setdefault(field, fallback)
+                if not valid_data_shape(data):
+                    self._send_json({"ok": False, "error": "invalid allocation data"}, 500)
+                    return
+                self._send_json({
+                    "courses": [
+                        {
+                            "name": course.get("name", ""),
+                            "students": [
+                                {"name": student.get("name", "")}
+                                for student in course.get("students", [])
+                                if isinstance(student, dict)
+                            ],
+                        }
+                        for course in data["courses"]
+                    ],
+                    "allocations": data["allocations"],
+                    "rooms": data["rooms"],
+                    "roomColors": data["roomColors"],
+                })
+            return
         if path == "/api/data/export":
             if self._require_permission("backups.manage") is None:
                 return
@@ -849,6 +885,36 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "permission denied", "permissions": sorted(missing)}, 403)
                 return
             write_json(DATA_FILE, data)
+            self._send_json({"ok": True})
+            return
+        if path == "/api/allocation-data":
+            if self._require_permission("allocations.manage") is None:
+                return
+            try:
+                allocation_data = self._read_body()
+            except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                self._send_json({"ok": False, "error": "invalid data"}, 400)
+                return
+            if (not isinstance(allocation_data, dict) or
+                    set(allocation_data) != {"allocations", "rooms", "roomColors"}):
+                self._send_json({"ok": False, "error": "invalid allocation data"}, 400)
+                return
+            with DATA_LOCK:
+                data = read_json(DATA_FILE, default_data())
+                data.setdefault("courses", [])
+                data.setdefault("allocations", [])
+                data.setdefault("rooms", [])
+                data.setdefault("roomColors", {})
+                data.setdefault("workspace", [])
+                data.setdefault("dailyPayments", [])
+                data.setdefault("expenses", [])
+                data.setdefault("owners", [])
+                data.setdefault("closings", [])
+                data.update(allocation_data)
+                if not valid_data_shape(data):
+                    self._send_json({"ok": False, "error": "invalid allocation data"}, 400)
+                    return
+                write_json(DATA_FILE, data)
             self._send_json({"ok": True})
             return
         self.send_error(404, "Not Found")
