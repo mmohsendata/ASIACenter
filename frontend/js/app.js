@@ -302,7 +302,9 @@ function applyPermissionsToUI() {
           currentPermissions.has('users.view')))) &&
         pagePermissions.some(permission => currentPermissions.has(permission)));
     element.hidden = !hasElementPermission || !hasPagePermission;
-    element.style.display = element.hidden ? 'none' : '';
+    if (!element.matches('section')) {
+      element.style.display = element.hidden ? 'none' : '';
+    }
   });
 }
 
