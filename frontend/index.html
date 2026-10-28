@@ -96,6 +96,22 @@
         <div class="stat-icon" style="background: #f3e8ff; color: #9333ea;"><i class="fa-solid fa-laptop-code"></i></div>
       </div>
     </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-info">
+          <h4>مدفوعات الحصص نقداً</h4>
+          <div class="stat-val" id="daily-session-cash-income">0 ج.م</div>
+        </div>
+        <div class="stat-icon" style="background: #dcfce7; color: #16a34a;"><i class="fa-solid fa-money-bill-1-wave"></i></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-info">
+          <h4>مدفوعات الحصص بالتحويل</h4>
+          <div class="stat-val" id="daily-session-transfer-income">0 ج.م</div>
+        </div>
+        <div class="stat-icon" style="background: #dbeafe; color: #2563eb;"><i class="fa-solid fa-building-columns"></i></div>
+      </div>
+    </div>
 
     <!-- Daily Details Breakdown -->
     <div class="box">
@@ -145,7 +161,8 @@
               <th>سعر الكورس</th>
               <th>نسبة المعيد</th>
               <th>المحصل للكورس</th>
-              <th>محصل الحصص</th>
+              <th>محصل الحصص نقداً</th>
+              <th>محصل الحصص تحويلاً</th>
               <th>الإجراءات</th>
             </tr>
           </thead>
@@ -187,7 +204,8 @@
               <th>المتبقي</th>
               <th>تسديد دفعة</th>
               <th>حضر اليوم؟</th>
-              <th>دفع 50ج؟</th>
+              <th>نقداً 50ج؟</th>
+              <th>تحويل 50ج؟</th>
               <th>تعديل</th>
               <th>إجراءات</th>
             </tr>
@@ -239,6 +257,22 @@
         <div class="input-group">
           <i class="fa-solid fa-search"></i>
           <input type="text" id="global-student-search" placeholder="ابحث باسم الطالب أو رقم الهاتف..." oninput="renderStudentsDirectory()">
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-info">
+            <h4>إجمالي مدفوعات الحصص نقداً</h4>
+            <div class="stat-val" id="students-session-cash-income">0 ج.م</div>
+          </div>
+          <div class="stat-icon" style="background: #dcfce7; color: #16a34a;"><i class="fa-solid fa-money-bill-1-wave"></i></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info">
+            <h4>إجمالي مدفوعات الحصص بالتحويل</h4>
+            <div class="stat-val" id="students-session-transfer-income">0 ج.م</div>
+          </div>
+          <div class="stat-icon" style="background: #dbeafe; color: #2563eb;"><i class="fa-solid fa-building-columns"></i></div>
         </div>
       </div>
       <div id="students-directory-results">

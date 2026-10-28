@@ -798,6 +798,8 @@ function roundCurrency(amount) {
 function loadDailyReport() {
   const chosenDate = document.getElementById('filter-date').value || '2026-10-15';
   let totalSessionMoney = 0;
+  let totalSessionCashMoney = 0;
+  let totalSessionTransferMoney = 0;
   let totalCourseMoney = 0;
   let totalWSMoney = 0;
   let attendanceList = [];
@@ -823,7 +825,11 @@ function loadDailyReport() {
         s.sessions.forEach(sess => {
           if (sess.date === chosenDate || (!sess.date && chosenDate === '2026-10-15' && sess.present)) {
             const paid50 = sess.paid50 ? 50 : 0;
-            if (paid50 > 0) totalSessionMoney += paid50;
+            if (paid50 > 0) {
+              totalSessionMoney += paid50;
+              if (sess.paid50Method === 'transfer') totalSessionTransferMoney += paid50;
+              else totalSessionCashMoney += paid50;
+            }
             attendanceList.push({
               name: s.name,
               phone: s.phone || '-',
@@ -856,6 +862,8 @@ function loadDailyReport() {
   const grandTotal = totalSessionMoney + totalCourseMoney + totalWSMoney;
   document.getElementById('daily-total-income').innerText = grandTotal.toLocaleString() + ' ج.م';
   document.getElementById('daily-session-income').innerText = totalSessionMoney.toLocaleString() + ' ج.م';
+  document.getElementById('daily-session-cash-income').innerText = totalSessionCashMoney.toLocaleString() + ' ج.م';
+  document.getElementById('daily-session-transfer-income').innerText = totalSessionTransferMoney.toLocaleString() + ' ج.م';
   document.getElementById('daily-course-income').innerText = totalCourseMoney.toLocaleString() + ' ج.م';
   document.getElementById('daily-ws-income').innerText = totalWSMoney.toLocaleString() + ' ج.م';
   document.getElementById('daily-students-count').innerText = attendanceList.length + ' عملية / حضور';
@@ -888,13 +896,17 @@ function renderCoursesTable() {
       const fee = c.fee || c.students[0]?.fee || 2200;
       const instructorPercentage = getCourseInstructorPercentage(c);
       let totalPaidCourse = 0;
-      let totalSessionCollected = 0;
+      let totalSessionCashCollected = 0;
+      let totalSessionTransferCollected = 0;
 
       c.students.forEach(s => {
         totalPaidCourse += (s.paid || 0);
         if (s.sessions) {
           s.sessions.forEach(sess => {
-            if (sess.paid50) totalSessionCollected += 50;
+            if (sess.paid50) {
+              if (sess.paid50Method === 'transfer') totalSessionTransferCollected += 50;
+              else totalSessionCashCollected += 50;
+            }
           });
         }
       });
@@ -907,7 +919,8 @@ function renderCoursesTable() {
           <td>${fee} ج.م</td>
           <td>${instructorPercentage.toFixed(2)}%</td>
           <td style="color: #16a34a; font-weight: 700;">${totalPaidCourse.toLocaleString()} ج.م</td>
-          <td style="color: #d97706; font-weight: 700;">${totalSessionCollected.toLocaleString()} ج.م</td>
+          <td style="color: #16a34a; font-weight: 700;">${totalSessionCashCollected.toLocaleString()} ج.م</td>
+          <td style="color: #2563eb; font-weight: 700;">${totalSessionTransferCollected.toLocaleString()} ج.م</td>
           <td>
             <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.82rem;" onclick="openCourseSessionManager(${idx})">
               <i class="fa-solid fa-clipboard-user"></i> فتح الحصة والحضور
@@ -994,7 +1007,7 @@ function renderCourseStudents(cIdx) {
   const currentDate = document.getElementById('session-date-input').value;
 
   if (course.students.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding: 2rem;">لا يوجد طلاب مضافين حتى الآن، اضغط إضافة طالب للمادة</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; padding: 2rem;">لا يوجد طلاب مضافين حتى الآن، اضغط إضافة طالب للمادة</td></tr>';
     return;
   }
 
@@ -1006,6 +1019,7 @@ function renderCourseStudents(cIdx) {
     const sessForDate = s.sessions ? s.sessions.find(x => x.date === currentDate) : null;
     const isAtt = sessForDate ? sessForDate.present : false;
     const isPaid50 = sessForDate ? sessForDate.paid50 : false;
+    const paid50Method = isPaid50 ? (sessForDate.paid50Method || 'cash') : null;
 
     html += `
       <tr>
@@ -1026,8 +1040,13 @@ function renderCourseStudents(cIdx) {
           </div>
         </td>
         <td style="text-align: center;">
-          <div class="check-toggle ${isPaid50 ? 'checked-pay' : ''}" onclick="handleSessionPay50Click(${sIdx}, ${isPaid50})">
+          <div class="check-toggle ${paid50Method === 'cash' ? 'checked-pay' : ''}" title="تسجيل 50 ج.م نقداً" onclick="handleSessionPay50Click(${sIdx}, 'cash')">
             <i class="fa-solid fa-coins"></i>
+          </div>
+        </td>
+        <td style="text-align: center;">
+          <div class="check-toggle ${paid50Method === 'transfer' ? 'checked-pay' : ''}" title="تسجيل 50 ج.م بالتحويل" onclick="handleSessionPay50Click(${sIdx}, 'transfer')">
+            <i class="fa-solid fa-building-columns"></i>
           </div>
         </td>
         <td>
@@ -1067,18 +1086,25 @@ function toggleAttendanceExecute(sIdx) {
   }
   saveDB();
   renderCourseStudents(currentCourseIndex);
+  renderCoursesTable();
+  renderStudentsDirectory();
+  loadDailyReport();
 }
 
 // Session 50 EGP payment Click with Lock on Uncheck/Modification
-function handleSessionPay50Click(sIdx, isCurrentlyPaid) {
+function handleSessionPay50Click(sIdx, method) {
   requirePermission('attendance.manage', () => {
-    requirePermission('payments.manage', () => toggleSessionPay50Execute(sIdx));
+    requirePermission('payments.manage', () => toggleSessionPay50Execute(sIdx, method));
   });
 }
 
-function toggleSessionPay50Execute(sIdx) {
+function toggleSessionPay50Execute(sIdx, method) {
   if (!hasPermission('attendance.manage')) return;
   if (!hasPermission('payments.manage')) return;
+  if (method !== 'cash' && method !== 'transfer') {
+    alert('طريقة الدفع غير صحيحة');
+    return;
+  }
   const course = db.courses[currentCourseIndex];
   const s = course.students[sIdx];
   const curDate = document.getElementById('session-date-input').value;
@@ -1086,14 +1112,23 @@ function toggleSessionPay50Execute(sIdx) {
 
   let sess = s.sessions.find(x => x.date === curDate);
   if (!sess) {
-    sess = { date: curDate, present: true, paid50: true };
+    sess = { date: curDate, present: true, paid50: true, paid50Method: method };
     s.sessions.push(sess);
   } else {
-    sess.paid50 = !sess.paid50;
-    if (sess.paid50) sess.present = true;
+    if (sess.paid50 && (sess.paid50Method || 'cash') === method) {
+      sess.paid50 = false;
+      delete sess.paid50Method;
+    } else {
+      sess.paid50 = true;
+      sess.paid50Method = method;
+      sess.present = true;
+    }
   }
   saveDB();
   renderCourseStudents(currentCourseIndex);
+  renderCoursesTable();
+  renderStudentsDirectory();
+  loadDailyReport();
 }
 
 // Payment modal with lock
@@ -1223,6 +1258,8 @@ function renderStudentsDirectory() {
   const container = document.getElementById('students-directory-results');
 
   const studentMap = {};
+  let totalSessionCashIncome = 0;
+  let totalSessionTransferIncome = 0;
   db.courses.forEach(c => {
     c.students.forEach(s => {
       const key = (s.name + '___' + (s.phone || '')).toLowerCase();
@@ -1239,10 +1276,19 @@ function renderStudentsDirectory() {
         studentIndex: c.students.indexOf(s),
         fee: s.fee || c.fee || 2200,
         paid: s.paid || 0,
-        sessionsCount: s.sessions ? s.sessions.filter(x => x.present).length : 0
+        sessionsCount: s.sessions ? s.sessions.filter(x => x.present).length : 0,
+        sessionCashIncome: s.sessions ? s.sessions.filter(x => x.paid50 && x.paid50Method !== 'transfer').length * 50 : 0,
+        sessionTransferIncome: s.sessions ? s.sessions.filter(x => x.paid50 && x.paid50Method === 'transfer').length * 50 : 0
+      });
+      (s.sessions || []).forEach(session => {
+        if (!session.paid50) return;
+        if (session.paid50Method === 'transfer') totalSessionTransferIncome += 50;
+        else totalSessionCashIncome += 50;
       });
     });
   });
+  document.getElementById('students-session-cash-income').innerText = totalSessionCashIncome.toLocaleString() + ' ج.م';
+  document.getElementById('students-session-transfer-income').innerText = totalSessionTransferIncome.toLocaleString() + ' ج.م';
 
   const students = Object.values(studentMap);
   const filtered = query ? students.filter(st => st.name.toLowerCase().includes(query) || st.phone.includes(query)) : students.slice(0, 30);
@@ -1280,6 +1326,8 @@ function renderStudentsDirectory() {
                 <th>المبلغ المدفوع</th>
                 <th>المتبقي عليه</th>
                 <th>عدد الحصص الحاضرة</th>
+                <th>مدفوع حصص نقداً</th>
+                <th>مدفوع حصص تحويلاً</th>
                 <th>إجراءات</th>
               </tr>
             </thead>
@@ -1291,6 +1339,8 @@ function renderStudentsDirectory() {
                   <td style="color:#16a34a; font-weight:700;">${co.paid} ج.م</td>
                   <td style="color:${co.fee-co.paid>0?'#ef4444':'#16a34a'}; font-weight:700;">${co.fee - co.paid} ج.م</td>
                   <td>${co.sessionsCount} حصة</td>
+                  <td style="color:#16a34a; font-weight:700;">${co.sessionCashIncome.toLocaleString()} ج.م</td>
+                  <td style="color:#2563eb; font-weight:700;">${co.sessionTransferIncome.toLocaleString()} ج.م</td>
                   <td>
                     <button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="editStudentFromDirectory(${co.courseIndex}, ${co.studentIndex})">
                       <i class="fa-solid fa-pen-to-square"></i> تعديل

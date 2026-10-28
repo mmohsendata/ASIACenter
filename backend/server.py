@@ -191,7 +191,8 @@ def data_change_permissions(old, new):
                     if old_session is None or new_session is None:
                         if (old_session or new_session or {}).get("paid50"):
                             required.add("payments.manage")
-                    elif old_session.get("paid50") != new_session.get("paid50"):
+                    elif (old_session.get("paid50") != new_session.get("paid50") or
+                          old_session.get("paid50Method") != new_session.get("paid50Method")):
                         required.add("payments.manage")
 
     known_fields = {
@@ -218,6 +219,19 @@ def valid_data_shape(data):
         for course in data["courses"]
     ):
         return False
+    for course in data["courses"]:
+        for student in course.get("students", []):
+            sessions = student.get("sessions", [])
+            if not isinstance(sessions, list):
+                return False
+            for session in sessions:
+                if not isinstance(session, dict):
+                    return False
+                if "paid50Method" in session and (
+                    session.get("paid50Method") not in ("cash", "transfer") or
+                    session.get("paid50") is not True
+                ):
+                    return False
 
     rooms = data["rooms"]
     if (any(not isinstance(room, str) or not room.strip() or len(room) > 80 for room in rooms) or
