@@ -142,6 +142,37 @@ table { width: 100%; border-collapse: collapse; text-align: right; }
 #professors-table { min-width: 940px; }
 #workspace-table { min-width: 820px; }
 #owners-table, #admin-users-table { min-width: 620px; }
+#payment-history-table { min-width: 980px; }
+#payment-history-table th, #payment-history-table td { white-space: nowrap; }
+#payment-history-table .payment-history-amount { color: #15803d; font-weight: 800; }
+#payment-history-table .payment-history-empty { padding: 2rem; color: var(--text-muted); text-align: center; }
+.payment-history-header { align-items: flex-start; }
+.payment-history-hint { margin-top: .35rem; color: var(--text-muted); font-size: .86rem; line-height: 1.6; }
+.payment-history-summary { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.payment-history-summary strong { color: #15803d; font-size: 1.05rem; }
+.payment-history-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: .8rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.payment-history-filters label { display: grid; gap: .35rem; min-width: 0; font-size: .82rem; font-weight: 700; }
+.payment-history-filters input, .payment-history-filters select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: .5rem .65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+  color: var(--text);
+  font: inherit;
+}
+.payment-history-search { grid-column: span 2; }
 .student-course-table { min-width: 820px; }
 th, td { vertical-align: middle; }
 th, td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
@@ -534,6 +565,8 @@ tr:hover { background: #f8fafc; }
   .admin-role-item { align-items: stretch; }
   .admin-role-actions { width: 100%; }
   .admin-role-actions .btn { flex: 1 1 auto; justify-content: center; }
+  .payment-history-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: .75rem; }
+  .payment-history-search { grid-column: 1 / -1; }
   .allocation-matrix { grid-template-columns: repeat(7, minmax(155px, 1fr)); }
   .modal-overlay { padding: .75rem; }
   .modal { padding: 1rem; }

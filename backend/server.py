@@ -347,6 +347,20 @@ def valid_data_shape(data):
                     session.get("paid50") is not True
                 ):
                     return False
+                if "paid50RecordedAt" in session:
+                    try:
+                        datetime.fromisoformat(session["paid50RecordedAt"].replace("Z", "+00:00"))
+                    except (AttributeError, TypeError, ValueError):
+                        return False
+
+    for payment in data["dailyPayments"]:
+        if ("paymentMethod" in payment and payment["paymentMethod"] not in ("cash", "transfer")):
+            return False
+        if "recordedAt" in payment:
+            try:
+                datetime.fromisoformat(payment["recordedAt"].replace("Z", "+00:00"))
+            except (AttributeError, TypeError, ValueError):
+                return False
 
     rooms = data["rooms"]
     if (any(not isinstance(room, str) or not room.strip() or len(room) > 80 for room in rooms) or

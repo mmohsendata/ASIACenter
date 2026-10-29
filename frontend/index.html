@@ -47,6 +47,7 @@
   <div class="nav-item" data-page-permission="expenses.view" onclick="switchTab('expenses')"><i class="fa-solid fa-receipt"></i> المصروفات</div>
   <div class="nav-item" data-page-permission="closing.view" onclick="switchTab('closing')"><i class="fa-solid fa-chart-pie"></i> الأرباح والإقفال</div>
   <div class="nav-item" data-permission="users.view" onclick="switchTab('admin')"><i class="fa-solid fa-user-shield"></i> إدارة المستخدمين</div>
+  <div class="nav-item" data-page-permission="payments.view" onclick="switchTab('paymentHistory')"><i class="fa-solid fa-money-bill-transfer"></i> سجل المدفوعات</div>
 </div>
 
 <div class="container">
@@ -500,6 +501,41 @@
     </div>
   </section>
 
+  <section id="tab-paymentHistory" data-page-permission="payments.view" style="display: none;">
+    <div class="box">
+      <div class="box-header payment-history-header">
+        <div>
+          <div class="box-title"><i class="fa-solid fa-money-bill-transfer" style="color:var(--success);"></i> سجل مدفوعات الطلاب</div>
+          <p class="payment-history-hint">يعرض دفعات الكورسات ورسوم الحصص مع التاريخ والوقت وطريقة الدفع والمادة.</p>
+        </div>
+        <div class="payment-history-summary">
+          <span id="payment-history-count" class="badge badge-primary">0 دفعة</span>
+          <strong id="payment-history-total">0 ج.م</strong>
+        </div>
+      </div>
+      <div class="payment-history-filters">
+        <label>من تاريخ<input type="date" id="payment-history-from" onchange="renderPaymentHistory()"></label>
+        <label>إلى تاريخ<input type="date" id="payment-history-to" onchange="renderPaymentHistory()"></label>
+        <label>المادة<select id="payment-history-course" onchange="renderPaymentHistory()"><option value="">كل المواد</option></select></label>
+        <label>طريقة الدفع<select id="payment-history-method" onchange="renderPaymentHistory()">
+          <option value="">كل الطرق</option>
+          <option value="cash">نقداً</option>
+          <option value="transfer">تحويل</option>
+        </select></label>
+        <label class="payment-history-search">بحث طالب أو هاتف<input type="search" id="payment-history-search" placeholder="اسم الطالب أو رقم الهاتف" oninput="renderPaymentHistory()"></label>
+      </div>
+      <div class="table-responsive payment-history-table">
+        <table id="payment-history-table">
+          <thead><tr>
+            <th>تاريخ الدفع</th><th>وقت الدفع</th><th>اسم الطالب</th><th>رقم الهاتف</th>
+            <th>المادة</th><th>نوع الدفعة</th><th>طريقة الدفع</th><th>المبلغ</th>
+          </tr></thead>
+          <tbody id="payment-history-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <section id="tab-access-denied" style="display: none;">
     <div class="box">
       <div class="box-title">لا توجد صلاحية لعرض بيانات النظام</div>
@@ -520,6 +556,7 @@
   <div class="bottom-bar-item" data-page-permission="expenses.view" onclick="switchTab('expenses')"><i class="fa-solid fa-receipt"></i> المصروفات</div>
   <div class="bottom-bar-item" data-page-permission="closing.view" onclick="switchTab('closing')"><i class="fa-solid fa-chart-pie"></i> الإقفال</div>
   <div class="bottom-bar-item" data-permission="users.view" onclick="switchTab('admin')"><i class="fa-solid fa-user-shield"></i> المستخدمون</div>
+  <div class="bottom-bar-item" data-page-permission="payments.view" onclick="switchTab('paymentHistory')"><i class="fa-solid fa-money-bill-transfer"></i> المدفوعات</div>
 </div>
 
 <!-- ================= MODALS ================= -->
@@ -765,6 +802,10 @@
       <label>المبلغ المدفوع مقدماً (إن وجد)</label>
       <input type="number" id="new-stu-paid" value="0">
     </div>
+    <div class="form-group">
+      <label for="new-stu-paid-method">طريقة الدفع المقدم</label>
+      <select id="new-stu-paid-method"><option value="cash">نقداً</option><option value="transfer">تحويل</option></select>
+    </div>
     <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
       <button class="btn btn-outline" onclick="closeModal('modal-add-student')">إلغاء</button>
       <button class="btn btn-primary" onclick="saveNewStudentToCurrentCourse()">حفظ الطالب</button>
@@ -834,6 +875,10 @@
     <div class="form-group">
       <label>تاريخ الدفع *</label>
       <input type="date" id="pay-date-input">
+    </div>
+    <div class="form-group">
+      <label for="pay-method-input">طريقة الدفع *</label>
+      <select id="pay-method-input"><option value="cash">نقداً</option><option value="transfer">تحويل</option></select>
     </div>
     <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem;">
       <button class="btn btn-outline" onclick="closeModal('modal-pay-course')">إلغاء</button>

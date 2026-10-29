@@ -69,7 +69,8 @@ const TAB_PERMISSIONS = {
   workspace: "workspace.view",
   expenses: "expenses.view",
   closing: "closing.view",
-  admin: "users.view"
+  admin: "users.view",
+  paymentHistory: "payments.view"
 };
 const DATA_VIEW_REQUIRED_MODULES = new Set([
   "courses", "students", "attendance", "payments", "workspace", "expenses", "closing"
@@ -518,7 +519,7 @@ function switchTab(tabId) {
   const activeSec = document.getElementById('tab-' + tabId);
   if (activeSec) activeSec.style.display = 'block';
 
-  const tabs = ['daily', 'courses', 'allocation', 'students', 'professors', 'workspace', 'expenses', 'closing', 'admin'];
+  const tabs = ['daily', 'courses', 'allocation', 'students', 'professors', 'workspace', 'expenses', 'closing', 'admin', 'paymentHistory'];
   const idx = tabs.indexOf(tabId);
   if (idx !== -1) {
     if (document.querySelectorAll('.nav-item')[idx]) document.querySelectorAll('.nav-item')[idx].classList.add('active');
@@ -545,6 +546,7 @@ function switchTab(tabId) {
     renderClosings();
   }
   if (tabId === 'admin') loadAdminPage();
+  if (tabId === 'paymentHistory') renderPaymentHistory();
 }
 
 // ================= COURSE ALLOCATION =================
@@ -1216,19 +1218,22 @@ function toggleSessionPay50Execute(sIdx, method) {
   const course = db.courses[currentCourseIndex];
   const s = course.students[sIdx];
   const curDate = document.getElementById('session-date-input').value;
+  const paymentRecordedAt = new Date().toISOString();
   if (!s.sessions) s.sessions = [];
 
   let sess = s.sessions.find(x => x.date === curDate);
   if (!sess) {
-    sess = { date: curDate, present: true, paid50: true, paid50Method: method };
+    sess = { date: curDate, present: true, paid50: true, paid50Method: method, paid50RecordedAt: paymentRecordedAt };
     s.sessions.push(sess);
   } else {
     if (sess.paid50 && (sess.paid50Method || 'cash') === method) {
       sess.paid50 = false;
       delete sess.paid50Method;
+      delete sess.paid50RecordedAt;
     } else {
       sess.paid50 = true;
       sess.paid50Method = method;
+      sess.paid50RecordedAt = paymentRecordedAt;
       sess.present = true;
     }
   }
@@ -1256,8 +1261,8 @@ function confirmPaymentCourse() {
   const sIdx = document.getElementById('pay-student-idx').value;
   const amt = parseFloat(document.getElementById('pay-amount-input').value);
   const date = document.getElementById('pay-date-input').value;
-  if (!amt || amt <= 0) {
-    alert('يرجى إدخال مبلغ صحيح');
+  if (!amt || amt <= 0 || !date) {
+    alert('يرجى إدخال مبلغ صحيح وتاريخ الدفع');
     return;
   }
   const s = db.courses[currentCourseIndex].students[sIdx];
@@ -1266,10 +1271,12 @@ function confirmPaymentCourse() {
   if (!db.dailyPayments) db.dailyPayments = [];
   db.dailyPayments.push({
     date: date,
+    recordedAt: new Date().toISOString(),
     studentName: s.name,
     phone: s.phone,
     courseName: db.courses[currentCourseIndex].name,
     amount: amt,
+    paymentMethod: document.getElementById('pay-method-input').value,
     instructorPercentage: getCourseInstructorPercentage(db.courses[currentCourseIndex])
   });
 
@@ -1328,6 +1335,7 @@ function saveNewStudentToCurrentCourse() {
   }
 
   const curDate = document.getElementById('session-date-input').value;
+  const paymentRecordedAt = new Date().toISOString();
   const newStudent = {
     name: name,
     phone: phone,
@@ -1342,10 +1350,12 @@ function saveNewStudentToCurrentCourse() {
     if (!db.dailyPayments) db.dailyPayments = [];
     db.dailyPayments.push({
       date: curDate,
+      recordedAt: paymentRecordedAt,
       studentName: name,
       phone: phone,
       courseName: db.courses[currentCourseIndex].name,
       amount: paid,
+      paymentMethod: document.getElementById('new-stu-paid-method').value,
       instructorPercentage: getCourseInstructorPercentage(db.courses[currentCourseIndex])
     });
   }
@@ -1469,6 +1479,99 @@ function editStudentFromDirectory(courseIndex, studentIndex) {
   switchTab('courses');
   openCourseSessionManager(courseIndex);
   openEditStudentModalWithLock(studentIndex);
+}
+
+function renderPaymentHistory() {
+  const courseFilter = document.getElementById('payment-history-course');
+  const selectedCourse = courseFilter.value;
+  const courses = [...new Set((db.courses || []).map(course => course.name).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'ar'));
+  courseFilter.innerHTML = '<option value="">كل المواد</option>' +
+    courses.map(course => `<option value="${escapeHtml(course)}">${escapeHtml(course)}</option>`).join('');
+  courseFilter.value = courses.includes(selectedCourse) ? selectedCourse : '';
+
+  const search = document.getElementById('payment-history-search').value.trim().toLocaleLowerCase();
+  const dateFrom = document.getElementById('payment-history-from').value;
+  const dateTo = document.getElementById('payment-history-to').value;
+  const method = document.getElementById('payment-history-method').value;
+  const records = [];
+
+  (db.dailyPayments || []).forEach(payment => {
+    records.push({
+      date: payment.date || '',
+      recordedAt: payment.recordedAt || '',
+      studentName: payment.studentName || '',
+      phone: payment.phone || '',
+      courseName: payment.courseName || '',
+      type: 'دفعة كورس',
+      amount: Number(payment.amount || 0),
+      method: payment.paymentMethod || 'cash'
+    });
+  });
+  (db.courses || []).forEach(course => {
+    (course.students || []).forEach(student => {
+      (student.sessions || []).forEach(session => {
+        if (!session.paid50) return;
+        records.push({
+          date: session.date || '',
+          recordedAt: session.paid50RecordedAt || '',
+          studentName: student.name || '',
+          phone: student.phone || '',
+          courseName: course.name || '',
+          type: 'رسوم حصة',
+          amount: 50,
+          method: session.paid50Method || 'cash'
+        });
+      });
+    });
+  });
+
+  const filtered = records.filter(record => {
+    if (dateFrom && (!record.date || record.date < dateFrom)) return false;
+    if (dateTo && (!record.date || record.date > dateTo)) return false;
+    if (courseFilter.value && record.courseName !== courseFilter.value) return false;
+    if (method && record.method !== method) return false;
+    const searchable = `${record.studentName} ${record.phone} ${record.courseName}`.toLocaleLowerCase();
+    return !search || searchable.includes(search);
+  }).sort((a, b) => {
+    const dateOrder = b.date.localeCompare(a.date);
+    if (dateOrder) return dateOrder;
+    return (b.recordedAt || '').localeCompare(a.recordedAt || '');
+  });
+
+  document.getElementById('payment-history-count').textContent = `${filtered.length} دفعة`;
+  document.getElementById('payment-history-total').textContent =
+    `${filtered.reduce((total, record) => total + record.amount, 0).toLocaleString()} ج.م`;
+  const tbody = document.getElementById('payment-history-body');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td class="payment-history-empty" colspan="8">لا توجد مدفوعات مطابقة للفلاتر المحددة.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(record => {
+    let time = 'غير مسجل';
+    if (record.recordedAt) {
+      const timestamp = new Date(record.recordedAt);
+      if (!Number.isNaN(timestamp.getTime())) {
+        time = timestamp.toLocaleTimeString('ar-EG', {
+          timeZone: 'Africa/Cairo',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+    }
+    const paymentMethod = record.method === 'transfer' ? 'تحويل' : 'نقداً';
+    return `
+      <tr>
+        <td>${escapeHtml(record.date || '—')}</td>
+        <td>${time}</td>
+        <td><strong>${escapeHtml(record.studentName)}</strong></td>
+        <td>${escapeHtml(record.phone || '—')}</td>
+        <td>${escapeHtml(record.courseName)}</td>
+        <td>${escapeHtml(record.type)}</td>
+        <td><span class="badge ${record.method === 'transfer' ? 'badge-primary' : 'badge-success'}">${paymentMethod}</span></td>
+        <td class="payment-history-amount">${record.amount.toLocaleString()} ج.م</td>
+      </tr>`;
+  }).join('');
 }
 
 // ================= PROFESSORS & SHARE LOGIC =================
